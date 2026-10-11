@@ -11,7 +11,7 @@ import type {
   BotSanitized,
   ServerStatusLog,
   DayZServerStatus,
-} from '@dayz-bot-network/shared';
+} from '@gamepulse/shared';
 
 export type Env = {
   Bindings: {

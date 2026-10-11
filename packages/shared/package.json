@@ -1,7 +1,7 @@
 {
-  "name": "@dayz-bot-network/shared",
+  "name": "@gamepulse/shared",
   "version": "1.0.0",
-  "description": "Shared TypeScript definitions and utilities for DayZ Discord Presence Network",
+  "description": "Shared TypeScript definitions and utilities for GamePulse Discord Presence Network",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

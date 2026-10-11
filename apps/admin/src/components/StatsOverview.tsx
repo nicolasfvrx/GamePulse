@@ -1,6 +1,6 @@
 import React from 'react';
 import { Cpu, Bot, Server, Users } from 'lucide-react';
-import type { OverviewStats } from '@dayz-bot-network/shared';
+import type { OverviewStats } from '@gamepulse/shared';
 
 interface StatsOverviewProps {
   stats: OverviewStats;

@@ -3,12 +3,12 @@ services:
     build:
       context: ./apps/worker
       dockerfile: Dockerfile
-    container_name: dayz-bot-worker
+    container_name: gamepulse-worker
     restart: unless-stopped
     environment:
-      - WORKER_ID=worker-node-docker-01
-      - WORKER_NAME=Worker Docker Node
-      - WORKER_SECRET_KEY=${WORKER_SECRET_KEY:-dayz-worker-secret-token-change-in-prod}
+      - WORKER_ID=gamepulse-docker-01
+      - WORKER_NAME=GamePulse Docker Node
+      - WORKER_SECRET_KEY=${WORKER_SECRET_KEY:-gamepulse-worker-secret-token-change-in-prod}
       - ADMIN_API_URL=${ADMIN_API_URL:-http://127.0.0.1:8788}
       - POLL_INTERVAL_SECS=20
       - RUST_LOG=info

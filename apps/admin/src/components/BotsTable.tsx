@@ -12,8 +12,8 @@ import {
   Wifi,
   Layers,
 } from 'lucide-react';
-import type { BotSanitized } from '@dayz-bot-network/shared';
-import { formatPresenceText } from '@dayz-bot-network/shared';
+import type { BotSanitized } from '@gamepulse/shared';
+import { formatPresenceText } from '@gamepulse/shared';
 
 interface BotsTableProps {
   bots: BotSanitized[];

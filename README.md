@@ -1,6 +1,8 @@
-# DayZ Discord Bot Network 🎮📡
+# GamePulse 🎮📡
 
-Réseau décentralisé et distribué de bots Discord Rich Presence pour serveurs de jeu DayZ (et jeux Steam Valve), propulsé par une architecture moderne :
+> **Réseau décentralisé et distribué de bots Discord Rich Presence & Query Steam Valve A2S (DayZ, Arma, Rust, CS...)**
+> Repository : [nicolasfvrx/GamePulse](https://github.com/nicolasfvrx/GamePulse)
+
 - **Control Plane** : Cloudflare Pages + Cloudflare Workers (Hono API) + Cloudflare D1 (Base SQLite distribuée).
 - **Data Plane / Workers** : Démon haute performance en **Rust** (Tokio, Tokio-Tungstenite, Reqwest, Sysinfo, Query UDP Steam A2S_INFO).
 - **Monorepo PNPM** : Partage de types TypeScript stricts entre l'API Cloudflare et le Dashboard React.
@@ -10,7 +12,7 @@ Réseau décentralisé et distribué de bots Discord Rich Presence pour serveurs
 ## 🏛️ Architecture du Projet
 
 ```
-gamepresencebot/
+GamePulse/
 ├── .github/workflows/
 │   ├── ci.yml                 # Validation CI (pnpm build/lint/typecheck, cargo check/test/clippy)
 │   ├── deploy-admin.yml       # Déploiement auto Cloudflare Pages & D1 migrations
@@ -136,14 +138,14 @@ docker build -t dayz-worker apps/worker
 
 # Lancement du conteneur
 docker run -d \
-  --name dayz-bot-worker \
+  --name gamepulse-worker \
   --restart unless-stopped \
   --network host \
-  -e WORKER_ID=worker-vps-01 \
-  -e ADMIN_API_URL="https://votre-admin.pages.dev" \
+  -e WORKER_ID=gamepulse-vps-01 \
+  -e ADMIN_API_URL="https://gamepulse-admin.pages.dev" \
   -e WORKER_SECRET_KEY="votre-cle-secrete" \
   -e POLL_INTERVAL_SECS=20 \
-  dayz-worker
+  ghcr.io/nicolasfvrx/gamepulse-worker:latest
 ```
 
 ---

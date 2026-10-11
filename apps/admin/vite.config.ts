@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@dayz-bot-network/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@gamepulse/shared': path.resolve(__dirname, '../../packages/shared/src'),
     },
   },
   server: {

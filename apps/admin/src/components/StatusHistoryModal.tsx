@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, History, AlertCircle } from 'lucide-react';
-import type { BotSanitized, ServerStatusLog } from '@dayz-bot-network/shared';
+import type { BotSanitized, ServerStatusLog } from '@gamepulse/shared';
 import { apiClient } from '../api/client.js';
 
 interface StatusHistoryModalProps {

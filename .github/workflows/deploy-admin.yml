@@ -32,17 +32,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Shared Package
-        run: pnpm --filter @dayz-bot-network/shared run build
+        run: pnpm --filter @gamepulse/shared run build
 
       - name: Build Admin Dashboard
-        run: pnpm --filter @dayz-bot-network/admin run build
+        run: pnpm --filter @gamepulse/admin run build
 
       - name: Apply Cloudflare D1 Migrations
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply dayz-network-db --remote
+          command: d1 migrations apply gamepulse-db --remote
         working-directory: apps/admin
         continue-on-error: true
 
@@ -51,5 +51,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name dayz-bot-network-admin
+          command: pages deploy dist --project-name gamepulse-admin
         working-directory: apps/admin

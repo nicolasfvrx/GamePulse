@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Eye, EyeOff, Info, Bot } from 'lucide-react';
-import type { BotSanitized, CreateBotInput, UpdateBotInput, Worker } from '@dayz-bot-network/shared';
+import type { BotSanitized, CreateBotInput, UpdateBotInput, Worker } from '@gamepulse/shared';
 
 interface BotModalProps {
   isOpen: boolean;

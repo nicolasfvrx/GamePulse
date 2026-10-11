@@ -25,8 +25,8 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env();
 
     info!("==================================================");
-    info!("   DayZ Discord Presence Network - Worker Daemon   ");
-    info!("   Version: {}                             ", env!("CARGO_PKG_VERSION"));
+    info!("     GamePulse - Discord Presence Worker Daemon   ");
+    info!("     Version: {}                             ", env!("CARGO_PKG_VERSION"));
     info!("==================================================");
     info!("Worker ID       : {}", config.worker_id);
     info!("Hostname        : {}", config.hostname);

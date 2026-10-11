@@ -6,7 +6,7 @@ import type {
   CreateBotInput,
   UpdateBotInput,
   ServerStatusLog,
-} from '@dayz-bot-network/shared';
+} from '@gamepulse/shared';
 
 const API_BASE = '/api';
 

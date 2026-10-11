@@ -12,7 +12,7 @@ import type {
   BotSanitized,
   CreateBotInput,
   UpdateBotInput,
-} from '@dayz-bot-network/shared';
+} from '@gamepulse/shared';
 import { Terminal, Key } from 'lucide-react';
 
 export const App: React.FC = () => {

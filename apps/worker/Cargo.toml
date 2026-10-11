@@ -1,9 +1,9 @@
 [package]
-name = "dayz-worker"
+name = "gamepulse-worker"
 version = "1.0.0"
 edition = "2021"
 authors = ["Nicolas"]
-description = "High-performance DayZ Discord Presence Worker Daemon with Steam A2S Query & Cloudflare sync"
+description = "GamePulse - High-performance Discord Presence Worker Daemon with Steam A2S Query"
 
 [dependencies]
 tokio = { version = "1.40", features = ["full"] }

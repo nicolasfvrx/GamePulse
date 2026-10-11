@@ -77,8 +77,8 @@ impl DiscordGatewayClient {
                             "intents": 0,
                             "properties": {
                                 "os": "windows",
-                                "browser": "dayz-bot-network",
-                                "device": "dayz-bot-network"
+                                "browser": "gamepulse-network",
+                                "device": "gamepulse-network"
                             }
                         }
                     });

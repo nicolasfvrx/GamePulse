@@ -1,7 +1,7 @@
 import React from 'react';
 import { Cpu, HardDrive, Clock, Bot, Trash2, AlertTriangle, AlertCircle } from 'lucide-react';
-import type { Worker } from '@dayz-bot-network/shared';
-import { formatUptime } from '@dayz-bot-network/shared';
+import type { Worker } from '@gamepulse/shared';
+import { formatUptime } from '@gamepulse/shared';
 
 interface WorkersListProps {
   workers: Worker[];

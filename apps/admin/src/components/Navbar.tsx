@@ -25,13 +25,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <span className="font-bold text-lg tracking-tight text-white">
-                DayZ<span className="text-emerald-400">Presence</span>
+                Game<span className="text-emerald-400">Pulse</span>
               </span>
               <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                v1.2
+                v1.0
               </span>
             </div>
-            <p className="text-xs text-slate-400">Réseau Décentralisé de Présence Discord & Query A2S</p>
+            <p className="text-xs text-slate-400">Réseau Décentralisé de Présence Discord & Query Steam A2S</p>
           </div>
         </div>
 
