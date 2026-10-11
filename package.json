@@ -1,0 +1,22 @@
+{
+  "name": "dayz-bot-network",
+  "version": "1.0.0",
+  "private": true,
+  "description": "High-performance DayZ Discord presence bot network with Cloudflare D1 control plane and Rust workers",
+  "scripts": {
+    "build": "pnpm --filter @dayz-bot-network/shared run build && pnpm --filter @dayz-bot-network/admin run build",
+    "typecheck": "pnpm --filter @dayz-bot-network/shared run typecheck && pnpm --filter @dayz-bot-network/admin run typecheck",
+    "lint": "pnpm --filter @dayz-bot-network/shared run lint && pnpm --filter @dayz-bot-network/admin run lint",
+    "dev:admin": "pnpm --filter @dayz-bot-network/admin run dev",
+    "build:admin": "pnpm --filter @dayz-bot-network/admin run build",
+    "cargo:check": "cargo check --manifest-path apps/worker/Cargo.toml",
+    "cargo:test": "cargo test --manifest-path apps/worker/Cargo.toml",
+    "cargo:clippy": "cargo clippy --manifest-path apps/worker/Cargo.toml -- -D warnings",
+    "cargo:build": "cargo build --manifest-path apps/worker/Cargo.toml --release",
+    "check:all": "pnpm run typecheck && pnpm run lint && pnpm run cargo:check && pnpm run cargo:test"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@11.22.0"
+}

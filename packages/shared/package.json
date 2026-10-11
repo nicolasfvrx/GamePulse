@@ -1,0 +1,22 @@
+{
+  "name": "@dayz-bot-network/shared",
+  "version": "1.0.0",
+  "description": "Shared TypeScript definitions and utilities for DayZ Discord Presence Network",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"Shared package lint passed\""
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

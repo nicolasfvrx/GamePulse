@@ -1,0 +1,12 @@
+name = "dayz-bot-network-admin"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+[vars]
+WORKER_SECRET_KEY = "dayz-worker-secret-token-change-in-prod"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dayz-network-db"
+database_id = "dayz-network-db-id"
+migrations_dir = "migrations"

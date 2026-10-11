@@ -1,0 +1,24 @@
+# Node & PNPM
+node_modules/
+.pnpm-store/
+dist/
+build/
+.wrangler/
+.mf/
+
+# Rust & Cargo
+target/
+Cargo.lock
+
+# Environment & Secrets
+.env
+.env.local
+*.env
+!.env.example
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
