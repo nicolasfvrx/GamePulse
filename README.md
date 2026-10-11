@@ -116,6 +116,36 @@ cargo run --manifest-path apps/worker/Cargo.toml
 cargo build --release --manifest-path apps/worker/Cargo.toml
 ```
 
+### 4. Déploiement Ultra-Rapide avec Docker 🐳
+
+Pour déployer un worker sur un VPS Linux ou un serveur distant en quelques secondes :
+
+#### Avec Docker Compose (Recommandé) :
+```bash
+docker compose up -d
+```
+Les logs du worker peuvent être suivis avec :
+```bash
+docker compose logs -f worker
+```
+
+#### Avec `docker run` directement :
+```bash
+# Build local
+docker build -t dayz-worker apps/worker
+
+# Lancement du conteneur
+docker run -d \
+  --name dayz-bot-worker \
+  --restart unless-stopped \
+  --network host \
+  -e WORKER_ID=worker-vps-01 \
+  -e ADMIN_API_URL="https://votre-admin.pages.dev" \
+  -e WORKER_SECRET_KEY="votre-cle-secrete" \
+  -e POLL_INTERVAL_SECS=20 \
+  dayz-worker
+```
+
 ---
 
 ## 🧪 Tests et Qualité de Code
@@ -139,6 +169,7 @@ cargo clippy --manifest-path apps/worker/Cargo.toml -- -D warnings
 Les workflows GitHub Actions sont préconfigurés dans `.github/workflows/` :
 - **`ci.yml`** : Exécute à chaque push/PR les étapes d'installation pnpm, typecheck TypeScript, linting, build du frontend, `cargo check`, `cargo test` et `cargo clippy`.
 - **`deploy-admin.yml`** : Applique les migrations D1 et déploie automatiquement l'application sur Cloudflare Pages.
+- **`docker-worker.yml`** : Compile l'image Docker multi-architecture (Linux `amd64` et `arm64`) avec cache GitHub Actions et publie automatiquement sur GitHub Container Registry (`ghcr.io`).
 - **`release-worker.yml`** : Compile les binaires natifs pour Linux x86_64 et Windows x86_64 à chaque tag git `v*` et génère automatiquement une GitHub Release avec les archives compressées.
 
 ---

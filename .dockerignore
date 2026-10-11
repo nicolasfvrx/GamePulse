@@ -1,0 +1,9 @@
+node_modules/
+.pnpm-store/
+dist/
+target/
+.git
+.wrangler/
+.env
+*.env
+*.log
