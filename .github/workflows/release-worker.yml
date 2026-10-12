@@ -2,6 +2,7 @@ name: Release Rust Worker
 
 on:
   push:
+    branches: [master]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -70,9 +71,11 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.0' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'GamePulse Worker v1.0.0' }}
           files: release-artifacts/*
           generate_release_notes: true
           draft: false
