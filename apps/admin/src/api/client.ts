@@ -2,6 +2,8 @@ import type {
   ApiResponse,
   OverviewStats,
   Worker,
+  CreateWorkerInput,
+  CreateWorkerResponse,
   BotSanitized,
   CreateBotInput,
   UpdateBotInput,
@@ -98,6 +100,22 @@ export const apiClient = {
       return [];
     }
   },
+
+  createWorker: (input: CreateWorkerInput) =>
+    request<CreateWorkerResponse>('/workers', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  regenerateWorkerKey: (id: string) =>
+    request<{ api_key: string }>(`/workers/${id}/regenerate-key`, {
+      method: 'POST',
+    }),
+
+  revokeWorkerKey: (id: string) =>
+    request<{ revoked: boolean }>(`/workers/${id}/revoke-key`, {
+      method: 'POST',
+    }),
 
   deleteWorker: (id: string) =>
     request<{ deleted: boolean }>(`/workers/${id}`, { method: 'DELETE' }),

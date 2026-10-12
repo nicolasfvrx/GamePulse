@@ -5,6 +5,8 @@ import type {
   WorkerHeartbeatResponse,
   CreateBotInput,
   UpdateBotInput,
+  CreateWorkerInput,
+  CreateWorkerResponse,
   ApiResponse,
   OverviewStats,
   Worker,
@@ -62,22 +64,62 @@ const verifyAdminKey = async (c: any, next: any) => {
 
 api.use('/bots', verifyAdminKey);
 api.use('/bots/*', verifyAdminKey);
+api.use('/workers', verifyAdminKey);
 api.use('/workers/*', verifyAdminKey);
 
 // Worker Authentication middleware for /worker/* routes
 api.use('/worker/*', async (c, next) => {
-  const secretKey = c.env?.WORKER_SECRET_KEY || 'gamepulse-worker-secret-token-change-in-prod';
-  const workerKey = c.req.header('X-Worker-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
+  const defaultSecretKey = c.env?.WORKER_SECRET_KEY || 'gamepulse-worker-secret-token-change-in-prod';
+  const clientKey = c.req.header('X-Worker-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
 
-  if (!workerKey || workerKey !== secretKey) {
+  if (!clientKey) {
     return c.json<ApiResponse<null>>({
       success: false,
-      error: 'Unauthorized: Invalid or missing worker secret key',
+      error: 'Unauthorized: Missing X-Worker-Key header',
       timestamp: new Date().toISOString(),
     }, 401);
   }
 
-  await next();
+  // Extract workerId from URL: /worker/:id/...
+  const match = c.req.path.match(/\/worker\/([^/]+)/);
+  const workerId = match ? match[1] : null;
+  const db = c.env?.DB;
+
+  if (workerId && db) {
+    try {
+      const row = await db.prepare('SELECT api_key FROM workers WHERE id = ?').bind(workerId).first<{ api_key?: string | null }>();
+      if (row && row.api_key) {
+        if (row.api_key === 'revoked') {
+          return c.json<ApiResponse<null>>({
+            success: false,
+            error: 'Unauthorized: Worker API key has been revoked',
+            timestamp: new Date().toISOString(),
+          }, 403);
+        }
+        if (row.api_key === clientKey) {
+          return await next();
+        }
+        return c.json<ApiResponse<null>>({
+          success: false,
+          error: 'Unauthorized: Invalid worker API key',
+          timestamp: new Date().toISOString(),
+        }, 401);
+      }
+    } catch (err) {
+      console.warn('Erreur vérification worker api_key en base:', err);
+    }
+  }
+
+  // Fallback to global secret key if no specific key exists for worker yet
+  if (clientKey === defaultSecretKey) {
+    return await next();
+  }
+
+  return c.json<ApiResponse<null>>({
+    success: false,
+    error: 'Unauthorized: Invalid worker secret key',
+    timestamp: new Date().toISOString(),
+  }, 401);
 });
 
 // -------------------------------------------------------------
@@ -365,12 +407,18 @@ api.get('/workers', async (c) => {
       `SELECT
         id, name, hostname, version,
         CASE
+          WHEN api_key = 'revoked' THEN 'offline'
           WHEN datetime(last_heartbeat_at) >= datetime('now', '-60 seconds') THEN 'online'
           WHEN datetime(last_heartbeat_at) >= datetime('now', '-180 seconds') THEN 'degraded'
           ELSE 'offline'
         END as status,
         cpu_usage_percent, ram_used_mb, ram_total_mb,
         uptime_seconds, active_bots_count, last_heartbeat_at,
+        api_key,
+        CASE
+          WHEN api_key IS NOT NULL AND length(api_key) > 10 THEN substr(api_key, 1, 8) || '...' || substr(api_key, -4)
+          ELSE api_key
+        END as api_key_preview,
         created_at, updated_at
        FROM workers
        ORDER BY last_heartbeat_at DESC`
@@ -386,6 +434,156 @@ api.get('/workers', async (c) => {
     return c.json<ApiResponse<null>>({
       success: false,
       error: `Failed to fetch workers: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/workers
+ * Registers a new worker and generates a dedicated secret API key
+ */
+api.post('/workers', async (c) => {
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({ success: false, error: 'DB not available', timestamp: new Date().toISOString() }, 500);
+  }
+
+  const body = await c.req.json<CreateWorkerInput>().catch(() => ({} as CreateWorkerInput));
+  if (!body.id?.trim() || !body.name?.trim()) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'Identifiant (ID) et Nom du worker sont obligatoires',
+      timestamp: new Date().toISOString(),
+    }, 400);
+  }
+
+  const workerId = body.id.trim();
+  const workerName = body.name.trim();
+  const apiKey = body.api_key?.trim() || `gp_wrk_${crypto.randomUUID().replace(/-/g, '')}`;
+  const now = new Date().toISOString();
+
+  try {
+    await db.prepare(`
+      INSERT INTO workers (
+        id, name, hostname, version, status, api_key, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'offline', ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        api_key = excluded.api_key,
+        updated_at = excluded.updated_at
+    `).bind(
+      workerId,
+      workerName,
+      body.hostname?.trim() || 'worker-host',
+      body.version?.trim() || '1.0.0',
+      apiKey,
+      now,
+      now
+    ).run();
+
+    const createdWorker: Worker = {
+      id: workerId,
+      name: workerName,
+      hostname: body.hostname?.trim() || 'worker-host',
+      version: body.version?.trim() || '1.0.0',
+      status: 'offline',
+      cpu_usage_percent: 0,
+      ram_used_mb: 0,
+      ram_total_mb: 0,
+      uptime_seconds: 0,
+      active_bots_count: 0,
+      api_key: apiKey,
+      api_key_preview: apiKey.substring(0, 8) + '...' + apiKey.substring(apiKey.length - 4),
+      last_heartbeat_at: null,
+      created_at: now,
+      updated_at: now,
+    };
+
+    return c.json<ApiResponse<CreateWorkerResponse>>({
+      success: true,
+      data: {
+        worker: createdWorker,
+        api_key: apiKey,
+      },
+      timestamp: now,
+    }, 201);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to create worker: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/workers/:id/regenerate-key
+ * Regenerates a dedicated API key for a worker
+ */
+api.post('/workers/:id/regenerate-key', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({ success: false, error: 'DB not available', timestamp: new Date().toISOString() }, 500);
+  }
+
+  const newKey = `gp_wrk_${crypto.randomUUID().replace(/-/g, '')}`;
+  const now = new Date().toISOString();
+
+  try {
+    await db.prepare(`
+      UPDATE workers
+      SET api_key = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(newKey, now, id).run();
+
+    return c.json<ApiResponse<{ api_key: string }>>({
+      success: true,
+      data: { api_key: newKey },
+      timestamp: now,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to regenerate worker key: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/workers/:id/revoke-key
+ * Revokes the worker API key, blocking connection
+ */
+api.post('/workers/:id/revoke-key', async (c) => {
+  const id = c.req.param('id');
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({ success: false, error: 'DB not available', timestamp: new Date().toISOString() }, 500);
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    await db.prepare(`
+      UPDATE workers
+      SET api_key = 'revoked', status = 'offline', updated_at = ?
+      WHERE id = ?
+    `).bind(now, id).run();
+
+    return c.json<ApiResponse<{ revoked: boolean }>>({
+      success: true,
+      data: { revoked: true },
+      timestamp: now,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to revoke worker key: ${errorMsg}`,
       timestamp: new Date().toISOString(),
     }, 500);
   }

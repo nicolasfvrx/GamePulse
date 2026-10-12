@@ -18,6 +18,8 @@ export interface Worker {
   ram_total_mb: number;
   uptime_seconds: number;
   active_bots_count: number;
+  api_key?: string;
+  api_key_preview?: string;
   last_heartbeat_at: string | null;
   created_at: string;
   updated_at: string;
@@ -28,10 +30,17 @@ export interface CreateWorkerInput {
   name: string;
   hostname?: string;
   version?: string;
+  api_key?: string;
+}
+
+export interface CreateWorkerResponse {
+  worker: Worker;
+  api_key: string;
 }
 
 export interface UpdateWorkerInput {
   name?: string;
   hostname?: string;
   version?: string;
+  api_key?: string;
 }

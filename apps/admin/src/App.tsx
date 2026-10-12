@@ -4,12 +4,15 @@ import { StatsOverview } from './components/StatsOverview.js';
 import { WorkersList } from './components/WorkersList.js';
 import { BotsTable } from './components/BotsTable.js';
 import { BotModal } from './components/BotModal.js';
+import { WorkerModal } from './components/WorkerModal.js';
 import { StatusHistoryModal } from './components/StatusHistoryModal.js';
 import { LoginModal } from './components/LoginModal.js';
 import { apiClient } from './api/client.js';
 import type {
   OverviewStats,
   Worker,
+  CreateWorkerInput,
+  CreateWorkerResponse,
   BotSanitized,
   CreateBotInput,
   UpdateBotInput,
@@ -32,6 +35,7 @@ export const App: React.FC = () => {
 
   // Modal states
   const [isBotModalOpen, setIsBotModalOpen] = useState(false);
+  const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSanitized | null>(null);
   const [historyBot, setHistoryBot] = useState<BotSanitized | null>(null);
 
@@ -99,6 +103,26 @@ export const App: React.FC = () => {
     setIsLoggedIn(false);
   };
 
+  const handleCreateWorker = async (input: CreateWorkerInput): Promise<CreateWorkerResponse | null> => {
+    const res = await apiClient.createWorker(input);
+    await loadData();
+    return res;
+  };
+
+  const handleRegenerateWorkerKey = async (id: string) => {
+    if (confirm('Voulez-vous générer une nouvelle clé pour ce worker ? L\'ancienne clé sera immédiatement invalidée.')) {
+      await apiClient.regenerateWorkerKey(id);
+      await loadData();
+    }
+  };
+
+  const handleRevokeWorkerKey = async (id: string) => {
+    if (confirm('Voulez-vous révoquer l\'accès de ce worker ? Il ne pourra plus communiquer avec l\'API tant qu\'une nouvelle clé n\'est pas générée.')) {
+      await apiClient.revokeWorkerKey(id);
+      await loadData();
+    }
+  };
+
   const handleDeleteWorker = async (id: string) => {
     if (confirm('Confirmez-vous la suppression de ce worker de la liste ?')) {
       await apiClient.deleteWorker(id);
@@ -136,7 +160,7 @@ export const App: React.FC = () => {
           </div>
           <div className="px-3.5 py-2 rounded-xl bg-gaming-950 border border-gaming-800/80 text-xs font-mono text-slate-400 flex items-center space-x-2 shrink-0">
             <Key className="w-4 h-4 text-amber-400" />
-            <span>Worker Secret: <code className="text-amber-300">X-Worker-Key</code></span>
+            <span>Auth Dédiée : <code className="text-emerald-300">Clés par Worker</code></span>
           </div>
         </div>
 
@@ -147,6 +171,9 @@ export const App: React.FC = () => {
         <WorkersList
           workers={workers}
           onDeleteWorker={handleDeleteWorker}
+          onOpenCreateWorker={() => setIsWorkerModalOpen(true)}
+          onRegenerateKey={handleRegenerateWorkerKey}
+          onRevokeKey={handleRevokeWorkerKey}
         />
 
         {/* Bots & DayZ Servers Section */}
@@ -188,6 +215,13 @@ export const App: React.FC = () => {
         onSubmit={handleCreateOrUpdateBot}
         initialBot={editingBot}
         workers={workers}
+      />
+
+      {/* Create Worker Modal */}
+      <WorkerModal
+        isOpen={isWorkerModalOpen}
+        onClose={() => setIsWorkerModalOpen(false)}
+        onSubmit={handleCreateWorker}
       />
 
       {/* History Logs Modal */}

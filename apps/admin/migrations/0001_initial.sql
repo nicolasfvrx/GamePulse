@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS workers (
   ram_total_mb REAL NOT NULL DEFAULT 0.0,
   uptime_seconds INTEGER NOT NULL DEFAULT 0,
   active_bots_count INTEGER NOT NULL DEFAULT 0,
+  api_key TEXT,
   last_heartbeat_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
