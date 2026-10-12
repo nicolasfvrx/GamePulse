@@ -15,6 +15,13 @@ import type {
   DayZServerStatus,
   CFToolsSettings,
   UpdateCFToolsSettingsInput,
+  MapDictionaryEntry,
+  UpsertMapEntryInput,
+} from '@gamepulse/shared';
+import {
+  DEFAULT_MAP_NAMES,
+  cleanDefaultMapName,
+  resolveMapName,
 } from '@gamepulse/shared';
 
 export type Env = {
@@ -60,6 +67,31 @@ async function ensureBotColumns(db: D1Database): Promise<void> {
     } catch {
       // Column already exists or SQLite error, safely ignore
     }
+  }
+}
+
+// Helper: Ensure map_dictionary table exists and is populated with defaults
+async function ensureMapDictionaryTable(db: D1Database): Promise<void> {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS map_dictionary (
+        raw_name TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `).run();
+
+    const countRow = await db.prepare('SELECT COUNT(*) as count FROM map_dictionary').first<{ count: number }>();
+    if (!countRow || countRow.count === 0) {
+      for (const [raw, disp] of Object.entries(DEFAULT_MAP_NAMES)) {
+        await db.prepare(
+          'INSERT OR IGNORE INTO map_dictionary (raw_name, display_name) VALUES (?, ?)'
+        ).bind(raw, disp).run();
+      }
+    }
+  } catch (err) {
+    console.warn('Error ensuring map_dictionary table:', err);
   }
 }
 
@@ -271,6 +303,8 @@ api.use('/bots', verifyAdmin);
 api.use('/bots/*', verifyAdmin);
 api.use('/settings', verifyAdmin);
 api.use('/settings/*', verifyAdmin);
+api.use('/maps', verifyAdmin);
+api.use('/maps/*', verifyAdmin);
 
 // Worker Authentication middleware for /worker/* routes
 api.use('/worker/*', async (c, next) => {
@@ -332,8 +366,9 @@ api.get('/worker/:id/bots', async (c) => {
     await Promise.all([
       ensureSettingsTable(db),
       ensureBotColumns(db),
+      ensureMapDictionaryTable(db),
     ]);
-    const [botsResult, cftoolsAppRow, cftoolsSecRow] = await Promise.all([
+    const [botsResult, cftoolsAppRow, cftoolsSecRow, mapsResult] = await Promise.all([
       db.prepare(
         `SELECT * FROM bots
          WHERE status = 'active'
@@ -342,6 +377,7 @@ api.get('/worker/:id/bots', async (c) => {
       ).bind(workerId).all(),
       db.prepare("SELECT value FROM settings WHERE key = 'cftools_application_id'").first<{ value: string }>(),
       db.prepare("SELECT value FROM settings WHERE key = 'cftools_secret'").first<{ value: string }>(),
+      db.prepare("SELECT raw_name, display_name FROM map_dictionary").all<{ raw_name: string; display_name: string }>(),
     ]);
 
     const formattedBots = (botsResult.results ?? []).map((bot: any) => ({
@@ -354,6 +390,11 @@ api.get('/worker/:id/bots', async (c) => {
       custom_status_text: bot.custom_status_text || null,
     }));
 
+    const mapsDict: Record<string, string> = {};
+    for (const row of mapsResult.results ?? []) {
+      mapsDict[row.raw_name.toLowerCase()] = row.display_name;
+    }
+
     return c.json({
       success: true,
       data: formattedBots,
@@ -361,6 +402,7 @@ api.get('/worker/:id/bots', async (c) => {
         application_id: cftoolsAppRow?.value || null,
         secret: cftoolsSecRow?.value || null,
       },
+      maps: mapsDict,
       timestamp: new Date().toISOString(),
     });
   } catch (err: unknown) {
@@ -438,12 +480,37 @@ api.post('/worker/:id/heartbeat', async (c) => {
 
     // 2. Process server statuses reported by worker
     if (payload.server_statuses && typeof payload.server_statuses === 'object') {
+      await ensureMapDictionaryTable(db);
+      const mapRows = await db.prepare('SELECT raw_name, display_name FROM map_dictionary').all<{ raw_name: string; display_name: string }>();
+      const currentMapsDict: Record<string, string> = {};
+      for (const row of mapRows.results ?? []) {
+        currentMapsDict[row.raw_name.toLowerCase()] = row.display_name;
+      }
+
       const updates = [];
       const logInserts = [];
 
       for (const [botId, statusObj] of Object.entries(payload.server_statuses)) {
         if (!statusObj) continue;
         const status = statusObj as DayZServerStatus;
+
+        const rawMap = (status.map_name || '').trim();
+        if (rawMap) {
+          const rawLower = rawMap.toLowerCase();
+          if (!currentMapsDict[rawLower]) {
+            const autoDisplay = cleanDefaultMapName(rawMap);
+            currentMapsDict[rawLower] = autoDisplay;
+            try {
+              await db.prepare(
+                `INSERT INTO map_dictionary (raw_name, display_name, created_at, updated_at)
+                 VALUES (?, ?, ?, ?)
+                 ON CONFLICT(raw_name) DO NOTHING`
+              ).bind(rawLower, autoDisplay, nowIso, nowIso).run();
+            } catch {}
+          }
+        }
+
+        const resolvedMap = resolveMapName(status.map_name, currentMapsDict);
 
         updates.push(
           db.prepare(
@@ -461,7 +528,7 @@ api.post('/worker/:id/heartbeat', async (c) => {
             WHERE id = ?`
           ).bind(
             status.server_name || '',
-            status.map_name || '',
+            resolvedMap,
             status.players_count ?? 0,
             status.max_players ?? 60,
             status.queue_size ?? 0,
@@ -487,7 +554,7 @@ api.post('/worker/:id/heartbeat', async (c) => {
             status.query_port || 2303,
             status.is_online ? 1 : 0,
             status.server_name || '',
-            status.map_name || '',
+            resolvedMap,
             status.players_count ?? 0,
             status.max_players ?? 60,
             status.queue_size ?? 0,
@@ -1213,4 +1280,126 @@ api.post('/settings/cftools', async (c) => {
     }, 500);
   }
 });
+
+/**
+ * GET /api/maps
+ * Returns all map dictionary entries.
+ */
+api.get('/maps', async (c) => {
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'D1 Database not configured',
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+
+  try {
+    await ensureMapDictionaryTable(db);
+    const result = await db.prepare(
+      'SELECT raw_name, display_name, created_at, updated_at FROM map_dictionary ORDER BY display_name ASC'
+    ).all<MapDictionaryEntry>();
+
+    return c.json<ApiResponse<MapDictionaryEntry[]>>({
+      success: true,
+      data: result.results ?? [],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to fetch map dictionary: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/maps
+ * Adds or updates a map translation entry.
+ */
+api.post('/maps', async (c) => {
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'D1 Database not configured',
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+
+  try {
+    const body = await c.req.json<UpsertMapEntryInput>();
+    if (!body.raw_name || !body.raw_name.trim() || !body.display_name || !body.display_name.trim()) {
+      return c.json<ApiResponse<null>>({
+        success: false,
+        error: 'raw_name and display_name are required',
+        timestamp: new Date().toISOString(),
+      }, 400);
+    }
+
+    const rawName = body.raw_name.trim().toLowerCase();
+    const displayName = body.display_name.trim();
+    const nowIso = new Date().toISOString();
+
+    await ensureMapDictionaryTable(db);
+    await db.prepare(
+      `INSERT INTO map_dictionary (raw_name, display_name, created_at, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(raw_name) DO UPDATE SET
+         display_name = excluded.display_name,
+         updated_at = excluded.updated_at`
+    ).bind(rawName, displayName, nowIso, nowIso).run();
+
+    return c.json<ApiResponse<{ raw_name: string; display_name: string }>>({
+      success: true,
+      data: { raw_name: rawName, display_name: displayName },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to save map entry: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * DELETE /api/maps/:raw_name
+ * Deletes a map translation entry.
+ */
+api.delete('/maps/:raw_name', async (c) => {
+  const rawName = c.req.param('raw_name');
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'D1 Database not configured',
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+
+  try {
+    await ensureMapDictionaryTable(db);
+    await db.prepare('DELETE FROM map_dictionary WHERE raw_name = ?').bind(rawName.trim().toLowerCase()).run();
+
+    return c.json<ApiResponse<{ deleted: boolean }>>({
+      success: true,
+      data: { deleted: true },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to delete map entry: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
 

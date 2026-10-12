@@ -2,6 +2,7 @@ use crate::a2s::{A2SClient, DayZServerStatus};
 use crate::api::BotConfig;
 use crate::cftools::CFToolsClient;
 use crate::discord::gateway::DiscordGatewayClient;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -23,7 +24,11 @@ impl ActiveBotHandle {
     }
 }
 
-pub fn spawn_bot(config: BotConfig, cftools_client: Arc<CFToolsClient>) -> ActiveBotHandle {
+pub fn spawn_bot(
+    config: BotConfig,
+    cftools_client: Arc<CFToolsClient>,
+    map_dictionary: Arc<RwLock<HashMap<String, String>>>,
+) -> ActiveBotHandle {
     let (presence_tx, presence_rx) = mpsc::unbounded_channel::<String>();
     let last_status = Arc::new(RwLock::new(None));
 
@@ -91,12 +96,16 @@ pub fn spawn_bot(config: BotConfig, cftools_client: Arc<CFToolsClient>) -> Activ
             };
 
             // Format presence string
-            let presence_text = format_presence(
-                &query_config.activity_format,
-                &status,
-                query_config.custom_status_enabled,
-                query_config.custom_status_text.as_deref(),
-            );
+            let presence_text = {
+                let dict_lock = map_dictionary.read().await;
+                format_presence(
+                    &query_config.activity_format,
+                    &status,
+                    query_config.custom_status_enabled,
+                    query_config.custom_status_text.as_deref(),
+                    Some(&dict_lock),
+                )
+            };
             let _ = presence_tx.send(presence_text);
 
             // Store status
@@ -116,11 +125,55 @@ pub fn spawn_bot(config: BotConfig, cftools_client: Arc<CFToolsClient>) -> Activ
     }
 }
 
+pub fn resolve_map_name(raw: &str, dict: &HashMap<String, String>) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "Chernarus".to_string();
+    }
+    let lower = trimmed.to_lowercase();
+    if let Some(mapped) = dict.get(&lower) {
+        return mapped.clone();
+    }
+
+    // Default known DayZ maps fallback
+    match lower.as_str() {
+        "chernarusplus" | "chernarus" => "Chernarus".to_string(),
+        "enoch" => "Livonia".to_string(),
+        "namalsk" => "Namalsk".to_string(),
+        "takistanplus" | "takistan" => "Takistan+".to_string(),
+        "deerisle" => "Deer Isle".to_string(),
+        "rostow" => "Rostow".to_string(),
+        "esseker" => "Esseker".to_string(),
+        "valning" => "Välning".to_string(),
+        "banov" => "Banov".to_string(),
+        "pripyat" => "Pripyat".to_string(),
+        "chiemsee" => "Chiemsee".to_string(),
+        "melkart" => "Melkart".to_string(),
+        "arland" => "Arland".to_string(),
+        "everon" => "Everon".to_string(),
+        "sakhal" => "Sakhal".to_string(),
+        "anizay" => "Anizay".to_string(),
+        "barrington" => "Barrington".to_string(),
+        "iztek" => "Iztek".to_string(),
+        "alteria" => "Alteria".to_string(),
+        "archana" => "Archana".to_string(),
+        _ => {
+            // Capitalize first letter fallback
+            let mut chars = trimmed.chars();
+            match chars.next() {
+                None => "Chernarus".to_string(),
+                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        }
+    }
+}
+
 pub fn format_presence(
     template: &str,
     status: &DayZServerStatus,
     custom_status_enabled: bool,
     custom_status_text: Option<&str>,
+    map_dictionary: Option<&HashMap<String, String>>,
 ) -> String {
     if custom_status_enabled {
         if let Some(custom) = custom_status_text {
@@ -135,7 +188,9 @@ pub fn format_presence(
         return "DayZ - Serveur Hors Ligne".to_string();
     }
 
-    let map = if status.map_name.is_empty() { "Chernarus" } else { &status.map_name };
+    let empty_dict = HashMap::new();
+    let dict = map_dictionary.unwrap_or(&empty_dict);
+    let resolved_map = resolve_map_name(&status.map_name, dict);
     let server_name = if status.server_name.is_empty() { "DayZ Server" } else { &status.server_name };
     let queue_num = status.queue_size.unwrap_or(0);
     let queue_suffix = if queue_num > 0 {
@@ -145,7 +200,7 @@ pub fn format_presence(
     };
 
     template
-        .replace("{map}", map)
+        .replace("{map}", &resolved_map)
         .replace("{players}", &status.players_count.to_string())
         .replace("{max_players}", &status.max_players.to_string())
         .replace("{queue}", &queue_num.to_string())
@@ -178,8 +233,8 @@ mod tests {
             error: None,
         };
 
-        let result = format_presence("Joue à DayZ - {map} [{players}/{max_players}]", &status, false, None);
-        assert_eq!(result, "Joue à DayZ - ChernarusPlus [34/60]");
+        let result = format_presence("Joue à DayZ - {map} [{players}/{max_players}]", &status, false, None, None);
+        assert_eq!(result, "Joue à DayZ - Chernarus [34/60]");
     }
 
     #[test]
@@ -202,10 +257,10 @@ mod tests {
             error: None,
         };
 
-        let result = format_presence("{players}/{max_players}{queue_suffix}", &status, false, None);
+        let result = format_presence("{players}/{max_players}{queue_suffix}", &status, false, None, None);
         assert_eq!(result, "60/60 (+7)");
 
-        let result_explicit = format_presence("{players}/{max_players} (File: {queue})", &status, false, None);
+        let result_explicit = format_presence("{players}/{max_players} (File: {queue})", &status, false, None, None);
         assert_eq!(result_explicit, "60/60 (File: 7)");
     }
 
@@ -234,8 +289,40 @@ mod tests {
             &status,
             true,
             Some("Ouverture du serveur à 20h !"),
+            None,
         );
         assert_eq!(result, "Ouverture du serveur à 20h !");
+    }
+
+    #[test]
+    fn test_format_presence_with_map_translation() {
+        let status = DayZServerStatus {
+            server_ip: "127.0.0.1".into(),
+            query_port: 2303,
+            game_port: Some(2302),
+            is_online: true,
+            server_name: "My Takistan Server".into(),
+            map_name: "takistanplus".into(),
+            players_count: 42,
+            max_players: 70,
+            bots_count: 0,
+            ping_ms: 15,
+            environment: "Linux".into(),
+            game_version: Some("1.24".into()),
+            queue_size: None,
+            last_queried_at: "2026-10-12".into(),
+            error: None,
+        };
+
+        // 1. Default mapping: takistanplus -> Takistan+
+        let default_res = format_presence("Map: {map}", &status, false, None, None);
+        assert_eq!(default_res, "Map: Takistan+");
+
+        // 2. Custom dictionary override
+        let mut custom_dict = HashMap::new();
+        custom_dict.insert("takistanplus".to_string(), "Takistan Plus Modded".to_string());
+        let custom_res = format_presence("Map: {map}", &status, false, None, Some(&custom_dict));
+        assert_eq!(custom_res, "Map: Takistan Plus Modded");
     }
 
     #[test]
@@ -258,7 +345,7 @@ mod tests {
             error: Some("Timeout".into()),
         };
 
-        let result = format_presence("Joue à DayZ - {map} [{players}/{max_players}]", &status, false, None);
+        let result = format_presence("Joue à DayZ - {map} [{players}/{max_players}]", &status, false, None, None);
         assert_eq!(result, "DayZ - Serveur Hors Ligne");
     }
 }

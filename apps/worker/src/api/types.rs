@@ -130,6 +130,8 @@ pub struct ApiResponse<T> {
     pub error: Option<String>,
     #[serde(default)]
     pub cftools: Option<CFToolsApiCredentials>,
+    #[serde(default)]
+    pub maps: Option<HashMap<String, String>>,
 }
 
 #[cfg(test)]

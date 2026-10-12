@@ -45,9 +45,9 @@ impl WorkerPoller {
         loop {
             ticker.tick().await;
 
-            // 1. Fetch desired bots and CFTools credentials from Cloudflare API
+            // 1. Fetch desired bots, CFTools credentials, and map dictionary from Cloudflare API
             match self.api_client.fetch_assigned_bots(&self.config.worker_id).await {
-                Ok((assigned_bots, cftools_creds)) => {
+                Ok((assigned_bots, cftools_creds, maps)) => {
                     debug!("Fetched {} bots from Cloudflare API", assigned_bots.len());
                     if let Some(creds) = cftools_creds {
                         if creds.application_id.is_some() || creds.secret.is_some() {
@@ -55,6 +55,9 @@ impl WorkerPoller {
                                 .update_credentials(creds.application_id, creds.secret)
                                 .await;
                         }
+                    }
+                    if let Some(map_dict) = maps {
+                        self.manager.update_maps(map_dict).await;
                     }
                     self.manager.sync_bots(assigned_bots);
                 }

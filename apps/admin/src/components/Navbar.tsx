@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, RefreshCw, Plus, Key, LogOut, Settings } from 'lucide-react';
+import { Radio, RefreshCw, Plus, Key, LogOut, Settings, Map } from 'lucide-react';
 
 interface NavbarProps {
   onRefresh: () => void;
@@ -8,6 +8,7 @@ interface NavbarProps {
   onlineWorkersCount: number;
   onChangePasswordClick?: () => void;
   onSettingsClick?: () => void;
+  onMapsClick?: () => void;
   onLogout?: () => void;
 }
 
@@ -18,6 +19,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onlineWorkersCount,
   onChangePasswordClick,
   onSettingsClick,
+  onMapsClick,
   onLogout,
 }) => {
   return (
@@ -61,6 +63,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
+
+          {onMapsClick && (
+            <button
+              onClick={onMapsClick}
+              className="p-2 rounded-lg bg-gaming-850 hover:bg-gaming-800 border border-gaming-800 text-slate-300 hover:text-emerald-400 transition-colors"
+              title="Dictionnaire des Maps DayZ"
+            >
+              <Map className="w-4 h-4" />
+            </button>
+          )}
 
           {onSettingsClick && (
             <button

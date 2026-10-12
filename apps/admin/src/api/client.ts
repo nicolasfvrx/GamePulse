@@ -10,6 +10,8 @@ import type {
   ServerStatusLog,
   CFToolsSettings,
   UpdateCFToolsSettingsInput,
+  MapDictionaryEntry,
+  UpsertMapEntryInput,
 } from '@gamepulse/shared';
 
 const API_BASE = '/api';
@@ -192,5 +194,25 @@ export const apiClient = {
     request<{ updated: boolean }>('/settings/cftools', {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+
+  getMaps: async (): Promise<MapDictionaryEntry[]> => {
+    try {
+      const data = await request<MapDictionaryEntry[]>('/maps');
+      return Array.isArray(data) ? data : [];
+    } catch {
+      return [];
+    }
+  },
+
+  saveMap: (input: UpsertMapEntryInput) =>
+    request<{ raw_name: string; display_name: string }>('/maps', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  deleteMap: (rawName: string) =>
+    request<{ deleted: boolean }>(`/maps/${encodeURIComponent(rawName)}`, {
+      method: 'DELETE',
     }),
 };

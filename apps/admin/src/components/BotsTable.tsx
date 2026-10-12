@@ -15,7 +15,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import type { BotSanitized } from '@gamepulse/shared';
-import { formatPresenceText } from '@gamepulse/shared';
+import { formatPresenceText, resolveMapName } from '@gamepulse/shared';
 
 interface BotsTableProps {
   bots: BotSanitized[];
@@ -161,7 +161,7 @@ export const BotsTable: React.FC<BotsTableProps> = ({
                         <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                           <span className="flex items-center space-x-1">
                             <MapPin className="w-3.5 h-3.5 text-amber-400" />
-                            <span className="font-medium text-slate-300">{bot.last_status?.map_name || 'Chernarus'}</span>
+                            <span className="font-medium text-slate-300">{resolveMapName(bot.last_status?.map_name)}</span>
                           </span>
                           <div className="flex items-center space-x-2">
                             {queueSize > 0 && (

@@ -4,11 +4,13 @@ use crate::cftools::CFToolsClient;
 use crate::discord::bot::{spawn_bot, ActiveBotHandle};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
 
 pub struct BotManager {
     bots: HashMap<String, ActiveBotHandle>,
     cftools_client: Arc<CFToolsClient>,
+    map_dictionary: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl BotManager {
@@ -16,11 +18,17 @@ impl BotManager {
         Self {
             bots: HashMap::new(),
             cftools_client,
+            map_dictionary: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     pub fn cftools_client(&self) -> &Arc<CFToolsClient> {
         &self.cftools_client
+    }
+
+    pub async fn update_maps(&self, new_maps: HashMap<String, String>) {
+        let mut lock = self.map_dictionary.write().await;
+        *lock = new_maps;
     }
 
     /// Reconciles currently running bots against desired configuration from Cloudflare API.
@@ -63,12 +71,20 @@ impl BotManager {
                     if let Some(old_bot) = self.bots.remove(&config.id) {
                         old_bot.stop();
                     }
-                    let handle = spawn_bot(config.clone(), Arc::clone(&self.cftools_client));
+                    let handle = spawn_bot(
+                        config.clone(),
+                        Arc::clone(&self.cftools_client),
+                        Arc::clone(&self.map_dictionary),
+                    );
                     self.bots.insert(config.id.clone(), handle);
                 }
             } else {
                 info!("Starting new bot: {} ({}:{})", config.name, config.server_ip, config.server_query_port);
-                let handle = spawn_bot(config.clone(), Arc::clone(&self.cftools_client));
+                let handle = spawn_bot(
+                    config.clone(),
+                    Arc::clone(&self.cftools_client),
+                    Arc::clone(&self.map_dictionary),
+                );
                 self.bots.insert(config.id.clone(), handle);
             }
         }

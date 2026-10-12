@@ -1,5 +1,51 @@
 import type { DayZServerStatus } from '../types/server.js';
 
+export const DEFAULT_MAP_NAMES: Record<string, string> = {
+  'chernarusplus': 'Chernarus',
+  'chernarus': 'Chernarus',
+  'enoch': 'Livonia',
+  'namalsk': 'Namalsk',
+  'takistanplus': 'Takistan+',
+  'takistan': 'Takistan',
+  'deerisle': 'Deer Isle',
+  'rostow': 'Rostow',
+  'esseker': 'Esseker',
+  'valning': 'Välning',
+  'banov': 'Banov',
+  'pripyat': 'Pripyat',
+  'chiemsee': 'Chiemsee',
+  'melkart': 'Melkart',
+  'arland': 'Arland',
+  'everon': 'Everon',
+  'sakhal': 'Sakhal',
+  'anizay': 'Anizay',
+  'barrington': 'Barrington',
+  'iztek': 'Iztek',
+  'alteria': 'Alteria',
+  'archana': 'Archana',
+};
+
+export function cleanDefaultMapName(raw?: string | null): string {
+  if (!raw || !raw.trim()) return 'Chernarus';
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if (DEFAULT_MAP_NAMES[lower]) {
+    return DEFAULT_MAP_NAMES[lower];
+  }
+  // Title-case fallback: takistan -> Takistan
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+export function resolveMapName(raw?: string | null, dictionary?: Record<string, string> | null): string {
+  if (!raw || !raw.trim()) return 'Chernarus';
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if (dictionary && dictionary[lower]) {
+    return dictionary[lower];
+  }
+  return cleanDefaultMapName(trimmed);
+}
+
 /**
  * Formats a Discord presence activity string using server status data and a template.
  * Template placeholders:
@@ -14,8 +60,11 @@ import type { DayZServerStatus } from '../types/server.js';
 export function formatPresenceText(
   template: string = 'Joue à DayZ - {map} [{players}/{max_players}]',
   status?: DayZServerStatus | null,
-  customStatus?: { enabled?: boolean; text?: string | null }
+  customStatus?: { enabled?: boolean; text?: string | null },
+  mapDictionary?: Record<string, string> | null
 ): string {
+  const mapName = resolveMapName(status?.map_name, mapDictionary);
+
   if (customStatus?.enabled && customStatus.text && customStatus.text.trim()) {
     const custom = customStatus.text.trim();
     if (status && status.is_online) {
@@ -23,7 +72,7 @@ export function formatPresenceText(
       const queueSuffix = queue > 0 ? ` (+${queue})` : '';
       return custom
         .replace('{server_name}', status.server_name || 'DayZ Server')
-        .replace('{map}', status.map_name || 'Chernarus')
+        .replace('{map}', mapName)
         .replace('{players}', String(status.players_count ?? 0))
         .replace('{max_players}', String(status.max_players ?? 60))
         .replace('{queue}', String(queue))
@@ -42,7 +91,7 @@ export function formatPresenceText(
 
   return template
     .replace('{server_name}', status.server_name || 'DayZ Server')
-    .replace('{map}', status.map_name || 'Chernarus')
+    .replace('{map}', mapName)
     .replace('{players}', String(status.players_count ?? 0))
     .replace('{max_players}', String(status.max_players ?? 60))
     .replace('{queue}', String(queue))

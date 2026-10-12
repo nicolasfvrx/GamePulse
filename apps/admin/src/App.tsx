@@ -9,6 +9,7 @@ import { StatusHistoryModal } from './components/StatusHistoryModal.js';
 import { LoginModal } from './components/LoginModal.js';
 import { ChangePasswordModal } from './components/ChangePasswordModal.js';
 import { SettingsModal } from './components/SettingsModal.js';
+import { MapsModal } from './components/MapsModal.js';
 import { apiClient } from './api/client.js';
 import type {
   OverviewStats,
@@ -24,6 +25,7 @@ export const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => apiClient.isAuthenticated());
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMapsOpen, setIsMapsOpen] = useState(false);
 
   const [stats, setStats] = useState<OverviewStats>({
     total_workers: 0,
@@ -158,6 +160,7 @@ export const App: React.FC = () => {
         }}
         isRefreshing={isRefreshing}
         onlineWorkersCount={stats.online_workers}
+        onMapsClick={() => setIsMapsOpen(true)}
         onSettingsClick={() => setIsSettingsOpen(true)}
         onChangePasswordClick={() => setIsChangePasswordOpen(true)}
         onLogout={handleLogout}
@@ -241,6 +244,13 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         onGetSettings={apiClient.getCFToolsSettings}
         onSaveSettings={apiClient.updateCFToolsSettings}
+      />
+
+      {/* Map Dictionary Modal */}
+      <MapsModal
+        isOpen={isMapsOpen}
+        onClose={() => setIsMapsOpen(false)}
+        onMapsUpdated={loadData}
       />
     </div>
   );
