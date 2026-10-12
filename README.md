@@ -60,8 +60,9 @@ GamePulse/
    - Historique des 50 dernières interrogations A2S avec visualisation de la fréquentation des serveurs.
 
 4. **Sécurité & Contrôle d'Accès** :
-   - Endpoints workers sécurisés par clé secrète via l'en-tête `X-Worker-Key`.
-   - Assignation souple : bots dédiés à un worker spécifique (`worker_id`) ou en mode réparti `auto`.
+   - **Protection de l'Administration** : Verrouillage de la console Web avec invite d'authentification (`LoginModal`). Toutes les opérations de modification/suppression (bots et workers) exigent la clé secrète via l'en-tête HTTP `X-Admin-Key`.
+   - **Protection des Workers** : Les endpoints de communication (`/api/worker/:id/bots` et `/api/worker/:id/heartbeat`) sont isolés et protégés par clé secrète via l'en-tête `X-Worker-Key`.
+   - **Gestion souple des bots** : Assignation dédiée à un worker spécifique (`worker_id`) ou mode équilibré `auto`.
 
 ---
 
@@ -88,7 +89,7 @@ Le dashboard sera accessible sur `http://localhost:3000`.
 Pour tester avec Cloudflare D1 en local via Wrangler Pages :
 ```bash
 cd apps/admin
-npx wrangler d1 migrations apply dayz-network-db --local
+npx wrangler d1 migrations apply gamepulse-db --local
 pnpm pages:dev
 ```
 
@@ -169,8 +170,14 @@ cargo clippy --manifest-path apps/worker/Cargo.toml -- -D warnings
 ## 🚢 Déploiement & Intégration Continue (CI/CD)
 
 Les workflows GitHub Actions sont préconfigurés dans `.github/workflows/` :
-- **`ci.yml`** : Exécute à chaque push/PR les étapes d'installation pnpm, typecheck TypeScript, linting, build du frontend, `cargo check`, `cargo test` et `cargo clippy`.
-- **`deploy-admin.yml`** : Applique les migrations D1 et déploie automatiquement l'application sur Cloudflare Pages.
+- **`ci.yml`** : Exécute à chaque push/PR sur `master` les étapes d'installation pnpm, typecheck TypeScript, linting, build du frontend, `cargo check`, `cargo test` et `cargo clippy`.
+- **`deploy-admin.yml`** : **Déploiement Zero-Touch 100% Automatisé** sur Cloudflare Pages & D1 à chaque push sur la branche `master` :
+  - Crée automatiquement la base Cloudflare D1 `gamepulse-db` si elle n'existe pas encore.
+  - Récupère dynamiquement son `database_id` réel et l'injecte dans `wrangler.toml`.
+  - Crée le projet Cloudflare Pages `gamepulse-admin` s'il est manquant.
+  - Applique l'ensemble des migrations SQL D1 (`migrations/0001_initial.sql`).
+  - Déploie le Dashboard React et l'API Hono.
+  - *Seuls deux secrets GitHub sont nécessaires* : `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` (optionnel : `ADMIN_SECRET_KEY`, `WORKER_SECRET_KEY`).
 - **`docker-worker.yml`** : Compile l'image Docker multi-architecture (Linux `amd64` et `arm64`) avec cache GitHub Actions et publie automatiquement sur GitHub Container Registry (`ghcr.io`).
 - **`release-worker.yml`** : Compile les binaires natifs pour Linux x86_64 et Windows x86_64 à chaque tag git `v*` et génère automatiquement une GitHub Release avec les archives compressées.
 

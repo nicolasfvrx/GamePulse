@@ -17,7 +17,7 @@ export type Env = {
   Bindings: {
     DB?: D1Database;
     WORKER_SECRET_KEY?: string;
-    ADMIN_API_KEY?: string;
+    ADMIN_SECRET_KEY?: string;
   };
 };
 
@@ -26,9 +26,47 @@ export const api = new Hono<Env>();
 // Middleware CORS
 api.use('*', cors());
 
+// Admin Login endpoint
+api.post('/auth/login', async (c) => {
+  const body = await c.req.json<{ password?: string }>().catch(() => ({ password: '' }));
+  const adminKey = c.env?.ADMIN_SECRET_KEY || 'gamepulse-admin-2026';
+  if (body.password && body.password === adminKey) {
+    return c.json<ApiResponse<{ token: string }>>({
+      success: true,
+      data: { token: adminKey },
+      timestamp: new Date().toISOString(),
+    });
+  }
+  return c.json<ApiResponse<null>>({
+    success: false,
+    error: 'Identifiants administrateur invalides',
+    timestamp: new Date().toISOString(),
+  }, 401);
+});
+
+// Admin Protection middleware for mutating routes (bots creation, edits, deletions, worker management)
+const verifyAdminKey = async (c: any, next: any) => {
+  if (['POST', 'PUT', 'DELETE'].includes(c.req.method)) {
+    const adminKey = c.env?.ADMIN_SECRET_KEY || 'gamepulse-admin-2026';
+    const clientKey = c.req.header('X-Admin-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
+    if (!clientKey || clientKey !== adminKey) {
+      return c.json({
+        success: false,
+        error: 'Non autorisé: Clé administrateur requise',
+        timestamp: new Date().toISOString(),
+      }, 401);
+    }
+  }
+  await next();
+};
+
+api.use('/bots', verifyAdminKey);
+api.use('/bots/*', verifyAdminKey);
+api.use('/workers/*', verifyAdminKey);
+
 // Worker Authentication middleware for /worker/* routes
 api.use('/worker/*', async (c, next) => {
-  const secretKey = c.env?.WORKER_SECRET_KEY || 'dayz-worker-secret-token-change-in-prod';
+  const secretKey = c.env?.WORKER_SECRET_KEY || 'gamepulse-worker-secret-token-change-in-prod';
   const workerKey = c.req.header('X-Worker-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
 
   if (!workerKey || workerKey !== secretKey) {

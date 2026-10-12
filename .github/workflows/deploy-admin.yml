@@ -2,7 +2,7 @@ name: Deploy Admin to Cloudflare Pages
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
     paths:
       - 'apps/admin/**'
       - 'packages/shared/**'
@@ -11,7 +11,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to Cloudflare Pages & D1
+    name: Deploy to Cloudflare Pages & D1 (Zero-Touch)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -37,19 +37,10 @@ jobs:
       - name: Build Admin Dashboard
         run: pnpm --filter @gamepulse/admin run build
 
-      - name: Apply Cloudflare D1 Migrations
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply gamepulse-db --remote
-        working-directory: apps/admin
-        continue-on-error: true
-
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name gamepulse-admin
-        working-directory: apps/admin
+      - name: Zero-Touch Cloudflare Pages & D1 Auto-Deploy
+        run: pnpm --filter @gamepulse/admin run deploy:auto
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+          WORKER_SECRET_KEY: ${{ secrets.WORKER_SECRET_KEY }}

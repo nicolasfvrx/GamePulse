@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "echo \"Admin package lint passed\"",
     "pages:dev": "wrangler pages dev dist --d1 DB=gamepulse-db --port 8788",
-    "pages:deploy": "wrangler pages deploy dist --project-name gamepulse-admin"
+    "pages:deploy": "wrangler pages deploy dist --project-name gamepulse-admin",
+    "deploy:auto": "node scripts/deploy-cloudflare.mjs"
   },
   "dependencies": {
     "@gamepulse/shared": "workspace:*",

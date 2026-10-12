@@ -1,4 +1,4 @@
--- Cloudflare D1 Migration: Initial Schema for DayZ Bot Network
+-- Cloudflare D1 Migration: Initial Schema for GamePulse
 -- 0001_initial.sql
 
 CREATE TABLE IF NOT EXISTS workers (

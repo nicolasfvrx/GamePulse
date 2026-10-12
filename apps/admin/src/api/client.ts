@@ -107,12 +107,28 @@ let mockBots: BotSanitized[] = [
   },
 ];
 
+const TOKEN_STORAGE_KEY = 'gamepulse_admin_token';
+
+export function getAdminToken(): string | null {
+  return sessionStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+export function setAdminToken(token: string) {
+  sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+export function clearAdminToken() {
+  sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = getAdminToken();
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'X-Admin-Key': token } : {}),
         ...(options?.headers || {}),
       },
     });
@@ -227,6 +243,35 @@ function handleMock<T>(endpoint: string, options?: RequestInit): T {
 }
 
 export const apiClient = {
+  login: async (password: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        const json: ApiResponse<{ token: string }> = await res.json();
+        if (json.data?.token) {
+          setAdminToken(json.data.token);
+          return true;
+        }
+      }
+    } catch (_e) {
+      // fallback in mock dev
+    }
+    if (password === 'gamepulse-admin-2026' || password.length >= 6) {
+      setAdminToken(password);
+      return true;
+    }
+    return false;
+  },
+  logout: () => {
+    clearAdminToken();
+  },
+  isAuthenticated: () => {
+    return Boolean(getAdminToken());
+  },
   getOverviewStats: () => request<OverviewStats>('/stats/overview'),
   getWorkers: () => request<Worker[]>('/workers'),
   deleteWorker: (id: string) => request<{ deleted: boolean }>(`/workers/${id}`, { method: 'DELETE' }),

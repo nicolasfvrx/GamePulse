@@ -5,6 +5,7 @@ import { WorkersList } from './components/WorkersList.js';
 import { BotsTable } from './components/BotsTable.js';
 import { BotModal } from './components/BotModal.js';
 import { StatusHistoryModal } from './components/StatusHistoryModal.js';
+import { LoginModal } from './components/LoginModal.js';
 import { apiClient } from './api/client.js';
 import type {
   OverviewStats,
@@ -16,6 +17,7 @@ import type {
 import { Terminal, Key } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => apiClient.isAuthenticated());
   const [stats, setStats] = useState<OverviewStats>({
     total_workers: 0,
     online_workers: 0,
@@ -83,6 +85,20 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleLogin = async (keyOrPassword: string): Promise<boolean> => {
+    const success = await apiClient.login(keyOrPassword);
+    if (success) {
+      setIsLoggedIn(true);
+      await loadData();
+    }
+    return success;
+  };
+
+  const handleLogout = () => {
+    apiClient.logout();
+    setIsLoggedIn(false);
+  };
+
   const handleDeleteWorker = async (id: string) => {
     if (confirm('Confirmez-vous la suppression de ce worker de la liste ?')) {
       await apiClient.deleteWorker(id);
@@ -92,12 +108,15 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gaming-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-black">
+      {!isLoggedIn && <LoginModal onLogin={handleLogin} />}
+
       <Navbar
         onRefresh={() => loadData()}
         onOpenCreateBot={() => {
           setEditingBot(null);
           setIsBotModalOpen(true);
         }}
+        onLogout={handleLogout}
         isRefreshing={isRefreshing}
         onlineWorkersCount={stats.online_workers}
       />
@@ -146,7 +165,7 @@ export const App: React.FC = () => {
       {/* Footer */}
       <footer className="border-t border-gaming-800 py-6 bg-gaming-950/80 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>DayZ Bot Network • Monorepo TypeScript & Rust</span>
+          <span>GamePulse • Monorepo TypeScript & Rust</span>
           <div className="flex items-center space-x-4">
             <span className="hover:text-slate-400 transition-colors">Cloudflare Pages / D1</span>
             <span>•</span>
