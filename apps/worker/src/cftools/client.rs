@@ -30,8 +30,14 @@ pub struct CFToolsClient {
 
 impl CFToolsClient {
     pub fn new(application_id: Option<String>, secret: Option<String>) -> Self {
+        let user_agent = format!("GamePulse/{} (Discord Presence Bot)", env!("CARGO_PKG_VERSION"));
+        let mut default_headers = header::HeaderMap::new();
+        default_headers.insert(header::ACCEPT, header::HeaderValue::from_static("application/json"));
+
         let http = Client::builder()
             .timeout(Duration::from_secs(8))
+            .user_agent(user_agent)
+            .default_headers(default_headers)
             .build()
             .unwrap_or_else(|_| Client::new());
 
@@ -153,6 +159,10 @@ impl CFToolsClient {
 
         if !res.status().is_success() {
             let status = res.status();
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                let mut tok_lock = self.cached_token.write().await;
+                *tok_lock = None;
+            }
             let body = res.text().await.unwrap_or_default();
             return Err(anyhow!("CFTools query failed for server {clean_id} ({status}): {body}"));
         }
