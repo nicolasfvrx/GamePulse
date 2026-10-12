@@ -11,27 +11,12 @@ import type {
 } from '@gamepulse/shared';
 
 const API_BASE = '/api';
-const TOKEN_STORAGE_KEY = 'gamepulse_admin_token';
-
-export function getAdminToken(): string | null {
-  return sessionStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-export function setAdminToken(token: string) {
-  sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearAdminToken() {
-  sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-}
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = getAdminToken();
   const res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'X-Admin-Key': token } : {}),
       ...(options?.headers || {}),
     },
   });
@@ -49,34 +34,6 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 }
 
 export const apiClient = {
-  login: async (password: string): Promise<boolean> => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      if (res.ok) {
-        const json: ApiResponse<{ token: string }> = await res.json();
-        if (json.data?.token) {
-          setAdminToken(json.data.token);
-          return true;
-        }
-      }
-    } catch (err) {
-      console.error('Erreur login:', err);
-    }
-    return false;
-  },
-
-  logout: () => {
-    clearAdminToken();
-  },
-
-  isAuthenticated: () => {
-    return Boolean(getAdminToken());
-  },
-
   getOverviewStats: async (): Promise<OverviewStats> => {
     try {
       return await request<OverviewStats>('/stats/overview');

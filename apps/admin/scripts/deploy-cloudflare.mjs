@@ -107,15 +107,6 @@ wranglerContent = wranglerContent.replace(
   `database_id = "${dbUuid}"`
 );
 
-// Injecter les secrets personnalisés s'ils sont fournis dans l'environnement
-if (process.env.ADMIN_SECRET_KEY) {
-  wranglerContent = wranglerContent.replace(
-    /ADMIN_SECRET_KEY\s*=\s*"[^"]*"/,
-    `ADMIN_SECRET_KEY = "${process.env.ADMIN_SECRET_KEY}"`
-  );
-  console.log('🔒 Secret ADMIN_SECRET_KEY injecté depuis les variables d\'environnement.');
-}
-
 if (process.env.WORKER_SECRET_KEY) {
   wranglerContent = wranglerContent.replace(
     /WORKER_SECRET_KEY\s*=\s*"[^"]*"/,

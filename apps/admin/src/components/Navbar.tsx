@@ -1,10 +1,9 @@
 import React from 'react';
-import { Radio, RefreshCw, Plus, LogOut } from 'lucide-react';
+import { Radio, RefreshCw, Plus } from 'lucide-react';
 
 interface NavbarProps {
   onRefresh: () => void;
   onOpenCreateBot: () => void;
-  onLogout?: () => void;
   isRefreshing: boolean;
   onlineWorkersCount: number;
 }
@@ -12,7 +11,6 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   onOpenCreateBot,
-  onLogout,
   isRefreshing,
   onlineWorkersCount,
 }) => {
@@ -65,16 +63,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Plus className="w-4 h-4" />
             <span>Nouveau Bot</span>
           </button>
-
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="p-2 rounded-lg bg-gaming-850 hover:bg-rose-500/20 border border-gaming-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 transition-all"
-              title="Verrouiller la console / Déconnexion"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </div>
     </header>

@@ -19,7 +19,6 @@ export type Env = {
   Bindings: {
     DB?: D1Database;
     WORKER_SECRET_KEY?: string;
-    ADMIN_SECRET_KEY?: string;
   };
 };
 
@@ -28,57 +27,9 @@ export const api = new Hono<Env>();
 // Middleware CORS
 api.use('*', cors());
 
-// Admin Login endpoint
-api.post('/auth/login', async (c) => {
-  const body = await c.req.json<{ password?: string }>().catch(() => ({ password: '' }));
-  const adminKey = c.env?.ADMIN_SECRET_KEY || 'gamepulse-admin-2026';
-  if (body.password && body.password === adminKey) {
-    return c.json<ApiResponse<{ token: string }>>({
-      success: true,
-      data: { token: adminKey },
-      timestamp: new Date().toISOString(),
-    });
-  }
-  return c.json<ApiResponse<null>>({
-    success: false,
-    error: 'Identifiants administrateur invalides',
-    timestamp: new Date().toISOString(),
-  }, 401);
-});
-
-// Admin Protection middleware for mutating routes (bots creation, edits, deletions, worker management)
-const verifyAdminKey = async (c: any, next: any) => {
-  if (['POST', 'PUT', 'DELETE'].includes(c.req.method)) {
-    const adminKey = c.env?.ADMIN_SECRET_KEY || 'gamepulse-admin-2026';
-    const clientKey = c.req.header('X-Admin-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
-    if (!clientKey || clientKey !== adminKey) {
-      return c.json({
-        success: false,
-        error: 'Non autorisé: Clé administrateur requise',
-        timestamp: new Date().toISOString(),
-      }, 401);
-    }
-  }
-  await next();
-};
-
-api.use('/bots', verifyAdminKey);
-api.use('/bots/*', verifyAdminKey);
-api.use('/workers', verifyAdminKey);
-api.use('/workers/*', verifyAdminKey);
-
 // Worker Authentication middleware for /worker/* routes
 api.use('/worker/*', async (c, next) => {
-  const defaultSecretKey = c.env?.WORKER_SECRET_KEY || 'gamepulse-worker-secret-token-change-in-prod';
   const clientKey = c.req.header('X-Worker-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
-
-  if (!clientKey) {
-    return c.json<ApiResponse<null>>({
-      success: false,
-      error: 'Unauthorized: Missing X-Worker-Key header',
-      timestamp: new Date().toISOString(),
-    }, 401);
-  }
 
   // Extract workerId from URL: /worker/:id/...
   const match = c.req.path.match(/\/worker\/([^/]+)/);
@@ -92,34 +43,24 @@ api.use('/worker/*', async (c, next) => {
         if (row.api_key === 'revoked') {
           return c.json<ApiResponse<null>>({
             success: false,
-            error: 'Unauthorized: Worker API key has been revoked',
+            error: 'Accès refusé: Ce worker a été révoqué',
             timestamp: new Date().toISOString(),
           }, 403);
         }
-        if (row.api_key === clientKey) {
-          return await next();
+        if (clientKey && row.api_key !== clientKey) {
+          return c.json<ApiResponse<null>>({
+            success: false,
+            error: 'Clé worker invalide',
+            timestamp: new Date().toISOString(),
+          }, 401);
         }
-        return c.json<ApiResponse<null>>({
-          success: false,
-          error: 'Unauthorized: Invalid worker API key',
-          timestamp: new Date().toISOString(),
-        }, 401);
       }
     } catch (err) {
-      console.warn('Erreur vérification worker api_key en base:', err);
+      console.warn('Vérification worker api_key:', err);
     }
   }
 
-  // Fallback to global secret key if no specific key exists for worker yet
-  if (clientKey === defaultSecretKey) {
-    return await next();
-  }
-
-  return c.json<ApiResponse<null>>({
-    success: false,
-    error: 'Unauthorized: Invalid worker secret key',
-    timestamp: new Date().toISOString(),
-  }, 401);
+  await next();
 });
 
 // -------------------------------------------------------------

@@ -4,7 +4,6 @@ pages_build_output_dir = "dist"
 
 [vars]
 WORKER_SECRET_KEY = "gamepulse-worker-secret-token-change-in-prod"
-ADMIN_SECRET_KEY = "gamepulse-admin-secret-change-in-prod"
 
 [[d1_databases]]
 binding = "DB"
