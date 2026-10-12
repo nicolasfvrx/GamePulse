@@ -60,31 +60,22 @@ pub fn spawn_bot(
             ticker.tick().await;
 
             let status = if query_config.query_type == "cftools" {
-                if let Some(ref server_id) = query_config.cftools_server_id {
-                    match cftools_client.query_server(
-                        server_id,
-                        &query_config.server_ip,
-                        query_config.server_query_port,
-                        query_config.server_game_port,
-                    ).await {
-                        Ok(s) => s,
-                        Err(err) => {
-                            warn!("[{}] CFTools query error: {}. Falling back to A2S...", query_config.name, err);
-                            A2SClient::query_server(
-                                &query_config.server_ip,
-                                query_config.server_query_port,
-                                query_config.server_game_port,
-                                Duration::from_secs(4),
-                            ).await
-                        }
+                match cftools_client.query_server(
+                    query_config.cftools_server_id.as_deref(),
+                    &query_config.server_ip,
+                    query_config.server_query_port,
+                    query_config.server_game_port,
+                ).await {
+                    Ok(s) => s,
+                    Err(err) => {
+                        warn!("[{}] CFTools query error: {}. Falling back to A2S...", query_config.name, err);
+                        A2SClient::query_server(
+                            &query_config.server_ip,
+                            query_config.server_query_port,
+                            query_config.server_game_port,
+                            Duration::from_secs(4),
+                        ).await
                     }
-                } else {
-                    A2SClient::query_server(
-                        &query_config.server_ip,
-                        query_config.server_query_port,
-                        query_config.server_game_port,
-                        Duration::from_secs(4),
-                    ).await
                 }
             } else {
                 A2SClient::query_server(
