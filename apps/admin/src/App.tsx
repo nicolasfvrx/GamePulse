@@ -6,6 +6,8 @@ import { BotsTable } from './components/BotsTable.js';
 import { BotModal } from './components/BotModal.js';
 import { WorkerModal } from './components/WorkerModal.js';
 import { StatusHistoryModal } from './components/StatusHistoryModal.js';
+import { LoginModal } from './components/LoginModal.js';
+import { ChangePasswordModal } from './components/ChangePasswordModal.js';
 import { apiClient } from './api/client.js';
 import type {
   OverviewStats,
@@ -18,6 +20,9 @@ import type {
 } from '@gamepulse/shared';
 
 export const App: React.FC = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => apiClient.isAuthenticated());
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+
   const [stats, setStats] = useState<OverviewStats>({
     total_workers: 0,
     online_workers: 0,
@@ -37,6 +42,11 @@ export const App: React.FC = () => {
   const [historyBot, setHistoryBot] = useState<BotSanitized | null>(null);
 
   const loadData = useCallback(async (silent = false) => {
+    if (!apiClient.isAuthenticated()) {
+      setIsLoggedIn(false);
+      return;
+    }
+
     if (!silent) setIsRefreshing(true);
     try {
       const [fetchedStats, fetchedWorkers, fetchedBots] = await Promise.all([
@@ -50,18 +60,37 @@ export const App: React.FC = () => {
       if (fetchedBots) setBots(fetchedBots);
     } catch (err) {
       console.error('Erreur chargement données:', err);
+      if (!apiClient.isAuthenticated()) {
+        setIsLoggedIn(false);
+      }
     } finally {
       if (!silent) setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
-    const timer = setInterval(() => {
-      loadData(true);
-    }, 15000);
-    return () => clearInterval(timer);
-  }, [loadData]);
+    if (isLoggedIn) {
+      loadData();
+      const timer = setInterval(() => {
+        loadData(true);
+      }, 15000);
+      return () => clearInterval(timer);
+    }
+  }, [isLoggedIn, loadData]);
+
+  const handleLogin = async (password: string): Promise<boolean> => {
+    const success = await apiClient.login(password);
+    if (success) {
+      setIsLoggedIn(true);
+      await loadData();
+    }
+    return success;
+  };
+
+  const handleLogout = async () => {
+    await apiClient.logout();
+    setIsLoggedIn(false);
+  };
 
   const handleCreateOrUpdateBot = async (data: CreateBotInput | UpdateBotInput) => {
     if (editingBot) {
@@ -114,6 +143,11 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gaming-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-black">
+      {/* If not logged in, display the login modal */}
+      {!isLoggedIn && (
+        <LoginModal onLogin={handleLogin} />
+      )}
+
       <Navbar
         onRefresh={() => loadData()}
         onOpenCreateBot={() => {
@@ -122,6 +156,8 @@ export const App: React.FC = () => {
         }}
         isRefreshing={isRefreshing}
         onlineWorkersCount={stats.online_workers}
+        onChangePasswordClick={() => setIsChangePasswordOpen(true)}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -187,6 +223,13 @@ export const App: React.FC = () => {
       <StatusHistoryModal
         bot={historyBot}
         onClose={() => setHistoryBot(null)}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        onChangePassword={apiClient.changePassword}
       />
     </div>
   );

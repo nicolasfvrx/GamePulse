@@ -26,6 +26,10 @@ GitHub Actions crée automatiquement la base de données D1, applique les tables
 👉 Votre tableau de bord est en ligne sur :  
 **`https://gamepulse-admin.pages.dev`**
 
+### Connexion & Mot de Passe Admin
+- **Mot de passe par défaut** : `admin`
+- **Changement de mot de passe** : Cliquez sur l'icône **🔑 (Clé)** en haut à droite du dashboard à tout moment pour définir votre mot de passe personnalisé. Il est enregistré instantanément dans votre base Cloudflare D1 (aucune reconfiguration nécessaire).
+
 ---
 
 ## 2. Lancer un Worker Rust

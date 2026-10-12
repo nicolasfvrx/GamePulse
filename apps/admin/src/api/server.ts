@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import type {
   WorkerHeartbeatPayload,
@@ -19,6 +19,8 @@ export type Env = {
   Bindings: {
     DB?: D1Database;
     WORKER_SECRET_KEY?: string;
+    ADMIN_PASSWORD?: string;
+    ADMIN_SECRET_KEY?: string;
   };
 };
 
@@ -26,6 +28,222 @@ export const api = new Hono<Env>();
 
 // Middleware CORS
 api.use('*', cors());
+
+// Helper: Ensure the settings table exists in D1
+async function ensureSettingsTable(db: D1Database): Promise<void> {
+  try {
+    await db.prepare('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
+  } catch (err) {
+    console.warn('Error creating settings table:', err);
+  }
+}
+
+// Helper: Get admin password from D1 settings > env.ADMIN_PASSWORD > env.ADMIN_SECRET_KEY > 'admin'
+async function getAdminPassword(c: { env?: Env['Bindings'] }): Promise<string> {
+  const db = c.env?.DB;
+  if (db) {
+    try {
+      await ensureSettingsTable(db);
+      const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('admin_password').first<{ value: string }>();
+      if (row?.value && row.value.trim().length > 0) {
+        return row.value.trim();
+      }
+    } catch (err) {
+      console.warn('Error reading admin_password from settings:', err);
+    }
+  }
+
+  if (c.env?.ADMIN_PASSWORD && c.env.ADMIN_PASSWORD.trim()) {
+    return c.env.ADMIN_PASSWORD.trim();
+  }
+  if (c.env?.ADMIN_SECRET_KEY && c.env.ADMIN_SECRET_KEY.trim()) {
+    return c.env.ADMIN_SECRET_KEY.trim();
+  }
+  return 'admin';
+}
+
+// Helper: Get active admin session token
+async function getAdminSession(c: { env?: Env['Bindings'] }): Promise<string | null> {
+  const db = c.env?.DB;
+  if (db) {
+    try {
+      await ensureSettingsTable(db);
+      const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('admin_session').first<{ value: string }>();
+      return row?.value || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// -------------------------------------------------------------
+// AUTHENTICATION ENDPOINTS
+// -------------------------------------------------------------
+
+/**
+ * POST /api/auth/login
+ */
+api.post('/auth/login', async (c) => {
+  const body = await c.req.json<{ password?: string }>().catch(() => ({} as { password?: string }));
+  const password = body.password?.trim() || '';
+  const currentPassword = await getAdminPassword(c);
+
+  if (!password || password !== currentPassword) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'Mot de passe incorrect',
+      timestamp: new Date().toISOString(),
+    }, 401);
+  }
+
+  const sessionToken = `gps_${crypto.randomUUID().replace(/-/g, '')}`;
+  const db = c.env?.DB;
+  if (db) {
+    try {
+      await ensureSettingsTable(db);
+      await db.prepare(`
+        INSERT INTO settings (key, value) VALUES ('admin_session', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).bind(sessionToken).run();
+    } catch (err) {
+      console.warn('Error saving session token:', err);
+    }
+  }
+
+  return c.json<ApiResponse<{ token: string }>>({
+    success: true,
+    data: { token: sessionToken },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * POST /api/auth/change-password
+ */
+api.post('/auth/change-password', async (c) => {
+  const body = await c.req.json<{ current_password?: string; new_password?: string }>().catch(() => ({} as { current_password?: string; new_password?: string }));
+  const currentPasswordInput = body.current_password?.trim() || '';
+  const newPasswordInput = body.new_password?.trim() || '';
+
+  if (!newPasswordInput || newPasswordInput.length < 3) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'Le nouveau mot de passe doit comporter au moins 3 caractères',
+      timestamp: new Date().toISOString(),
+    }, 400);
+  }
+
+  const actualPassword = await getAdminPassword(c);
+  if (currentPasswordInput !== actualPassword) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'Le mot de passe actuel est incorrect',
+      timestamp: new Date().toISOString(),
+    }, 401);
+  }
+
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: 'Base de données D1 non disponible pour enregistrer le mot de passe',
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+
+  const newSessionToken = `gps_${crypto.randomUUID().replace(/-/g, '')}`;
+  try {
+    await ensureSettingsTable(db);
+    await db.prepare(`
+      INSERT INTO settings (key, value) VALUES ('admin_password', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).bind(newPasswordInput).run();
+
+    await db.prepare(`
+      INSERT INTO settings (key, value) VALUES ('admin_session', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).bind(newSessionToken).run();
+
+    return c.json<ApiResponse<{ token: string }>>({
+      success: true,
+      data: { token: newSessionToken },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Erreur lors de la mise à jour du mot de passe: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * GET /api/auth/status
+ */
+api.get('/auth/status', async (c) => {
+  const token = c.req.header('X-Admin-Token') || c.req.header('X-Admin-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) {
+    return c.json<ApiResponse<{ authenticated: boolean }>>({
+      success: true,
+      data: { authenticated: false },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  const expectedPassword = await getAdminPassword(c);
+  const activeSession = await getAdminSession(c);
+  const isAuthenticated = token === expectedPassword || (activeSession !== null && token === activeSession);
+
+  return c.json<ApiResponse<{ authenticated: boolean }>>({
+    success: true,
+    data: { authenticated: isAuthenticated },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * POST /api/auth/logout
+ */
+api.post('/auth/logout', async (c) => {
+  const db = c.env?.DB;
+  if (db) {
+    try {
+      await ensureSettingsTable(db);
+      await db.prepare("DELETE FROM settings WHERE key = 'admin_session'").run();
+    } catch {}
+  }
+  return c.json<ApiResponse<{ logged_out: boolean }>>({
+    success: true,
+    data: { logged_out: true },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Admin Protection middleware
+const verifyAdmin = async (c: Context<Env>, next: () => Promise<void>) => {
+  const token = c.req.header('X-Admin-Token') || c.req.header('X-Admin-Key') || c.req.header('Authorization')?.replace('Bearer ', '');
+  const expectedPassword = await getAdminPassword(c);
+  const activeSession = await getAdminSession(c);
+
+  if (token && (token === expectedPassword || (activeSession && token === activeSession))) {
+    return await next();
+  }
+
+  return c.json<ApiResponse<null>>({
+    success: false,
+    error: 'Non autorisé: Mot de passe ou session requis',
+    timestamp: new Date().toISOString(),
+  }, 401);
+};
+
+api.use('/stats/*', verifyAdmin);
+api.use('/workers', verifyAdmin);
+api.use('/workers/*', verifyAdmin);
+api.use('/bots', verifyAdmin);
+api.use('/bots/*', verifyAdmin);
 
 // Worker Authentication middleware for /worker/* routes
 api.use('/worker/*', async (c, next) => {
@@ -685,7 +903,7 @@ api.post('/bots', async (c) => {
 /**
  * PUT /api/bots/:id
  */
-api.put('/api/bots/:id', async (c) => {
+api.put('/bots/:id', async (c) => {
   const id = c.req.param('id');
   const db = c.env?.DB;
   if (!db) {

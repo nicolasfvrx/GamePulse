@@ -1,11 +1,13 @@
 import React from 'react';
-import { Radio, RefreshCw, Plus } from 'lucide-react';
+import { Radio, RefreshCw, Plus, Key, LogOut } from 'lucide-react';
 
 interface NavbarProps {
   onRefresh: () => void;
   onOpenCreateBot: () => void;
   isRefreshing: boolean;
   onlineWorkersCount: number;
+  onChangePasswordClick?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -13,6 +15,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCreateBot,
   isRefreshing,
   onlineWorkersCount,
+  onChangePasswordClick,
+  onLogout,
 }) => {
   return (
     <header className="border-b border-gaming-800 bg-gaming-900/80 backdrop-blur-md sticky top-0 z-40">
@@ -36,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Status & Actions */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2.5">
           <div className="hidden md:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-gaming-850 border border-gaming-800 text-xs">
             <span className="relative flex h-2 w-2">
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${onlineWorkersCount > 0 ? 'bg-emerald-400' : 'bg-red-400'} opacity-75`}></span>
@@ -56,9 +60,29 @@ export const Navbar: React.FC<NavbarProps> = ({
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
 
+          {onChangePasswordClick && (
+            <button
+              onClick={onChangePasswordClick}
+              className="p-2 rounded-lg bg-gaming-850 hover:bg-gaming-800 border border-gaming-800 text-slate-300 hover:text-amber-400 transition-colors"
+              title="Changer le mot de passe"
+            >
+              <Key className="w-4 h-4" />
+            </button>
+          )}
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="p-2 rounded-lg bg-gaming-850 hover:bg-gaming-800 border border-gaming-800 text-slate-300 hover:text-rose-400 transition-colors"
+              title="Déconnexion"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+
           <button
             onClick={onOpenCreateBot}
-            className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition-all shadow-glow-green transform hover:-translate-y-0.5 active:translate-y-0"
+            className="flex items-center space-x-2 px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs sm:text-sm transition-all shadow-glow-green transform hover:-translate-y-0.5 active:translate-y-0 ml-1"
           >
             <Plus className="w-4 h-4" />
             <span>Nouveau Bot</span>

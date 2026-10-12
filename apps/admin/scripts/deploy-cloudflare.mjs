@@ -107,6 +107,14 @@ wranglerContent = wranglerContent.replace(
   `database_id = "${dbUuid}"`
 );
 
+if (process.env.ADMIN_PASSWORD) {
+  wranglerContent = wranglerContent.replace(
+    /ADMIN_PASSWORD\s*=\s*"[^"]*"/,
+    `ADMIN_PASSWORD = "${process.env.ADMIN_PASSWORD}"`
+  );
+  console.log('🔒 Mot de passe ADMIN_PASSWORD injecté depuis les variables d\'environnement.');
+}
+
 if (process.env.WORKER_SECRET_KEY) {
   wranglerContent = wranglerContent.replace(
     /WORKER_SECRET_KEY\s*=\s*"[^"]*"/,

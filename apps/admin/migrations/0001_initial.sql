@@ -61,3 +61,8 @@ CREATE TABLE IF NOT EXISTS server_status_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_bot_id_recorded_at ON server_status_logs(bot_id, recorded_at DESC);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
