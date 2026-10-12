@@ -78,13 +78,13 @@ export const App: React.FC = () => {
     }
   }, [isLoggedIn, loadData]);
 
-  const handleLogin = async (password: string): Promise<boolean> => {
-    const success = await apiClient.login(password);
-    if (success) {
+  const handleLogin = async (password: string): Promise<{ success: boolean; error?: string }> => {
+    const res = await apiClient.login(password);
+    if (res.success) {
       setIsLoggedIn(true);
       await loadData();
     }
-    return success;
+    return res;
   };
 
   const handleLogout = async () => {

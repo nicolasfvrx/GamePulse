@@ -49,8 +49,8 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const errorJson = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(errorJson?.error || `HTTP error ${res.status}`);
+    const errorJson = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+    throw new Error(errorJson?.error || errorJson?.message || (res.status === 404 ? 'Route API introuvable (404)' : `Erreur HTTP ${res.status}`));
   }
 
   const json: ApiResponse<T> = await res.json();
@@ -65,7 +65,7 @@ export const apiClient = {
     return Boolean(getStoredToken());
   },
 
-  login: async (password: string): Promise<boolean> => {
+  login: async (password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await request<{ token: string }>('/auth/login', {
         method: 'POST',
@@ -73,11 +73,12 @@ export const apiClient = {
       });
       if (res?.token) {
         setStoredToken(res.token);
-        return true;
+        return { success: true };
       }
-      return false;
-    } catch {
-      return false;
+      return { success: false, error: 'Réponse invalide du serveur' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg };
     }
   },
 

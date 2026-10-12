@@ -29,6 +29,10 @@ export const api = new Hono<Env>();
 // Middleware CORS
 api.use('*', cors());
 
+// Root & Health check
+api.get('/', (c) => c.json({ status: 'ok', message: 'GamePulse API is running' }));
+api.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
 // Helper: Ensure the settings table exists in D1
 async function ensureSettingsTable(db: D1Database): Promise<void> {
   try {

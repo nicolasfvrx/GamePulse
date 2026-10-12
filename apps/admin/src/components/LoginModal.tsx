@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Radio, Eye, EyeOff, ShieldCheck, ArrowRight } from 'lucide-react';
 
 interface LoginModalProps {
-  onLogin: (password: string) => Promise<boolean>;
+  onLogin: (password: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ onLogin }) => {
@@ -19,9 +19,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLogin }) => {
     setError(null);
 
     try {
-      const ok = await onLogin(password.trim());
-      if (!ok) {
-        setError('Mot de passe incorrect. (Par défaut: admin)');
+      const res = await onLogin(password.trim());
+      if (!res.success) {
+        setError(res.error || 'Mot de passe incorrect. (Par défaut: admin)');
       }
     } catch (_err) {
       setError('Impossible de joindre le serveur.');
