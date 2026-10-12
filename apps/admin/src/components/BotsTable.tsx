@@ -11,6 +11,8 @@ import {
   Users,
   Wifi,
   Layers,
+  Cloud,
+  MessageSquare,
 } from 'lucide-react';
 import type { BotSanitized } from '@gamepulse/shared';
 import { formatPresenceText } from '@gamepulse/shared';
@@ -54,7 +56,12 @@ export const BotsTable: React.FC<BotsTableProps> = ({
         <div className="space-y-4">
           {bots.map((bot) => {
             const isServerOnline = bot.last_status?.is_online;
-            const presencePreview = formatPresenceText(bot.activity_format, bot.last_status);
+            const presencePreview = formatPresenceText(
+              bot.activity_format,
+              bot.last_status,
+              { enabled: bot.custom_status_enabled, text: bot.custom_status_text }
+            );
+            const queueSize = bot.last_status?.queue_size ?? bot.last_queue_size ?? 0;
             const playersPercent =
               bot.last_status && bot.last_status.max_players > 0
                 ? Math.min(100, (bot.last_status.players_count / bot.last_status.max_players) * 100)
@@ -100,11 +107,26 @@ export const BotsTable: React.FC<BotsTableProps> = ({
                         <span>Worker: {bot.worker_id ? bot.worker_id : 'Auto (Tous)'}</span>
                       </span>
 
-                      {/* Server IP:Port */}
-                      <span className="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded bg-gaming-850 text-slate-300 border border-gaming-800 font-mono">
-                        <Server className="w-3 h-3 text-purple-400" />
-                        <span>{bot.server_ip}:{bot.server_query_port}</span>
-                      </span>
+                      {/* Query source badge */}
+                      {bot.query_type === 'cftools' ? (
+                        <span className="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/30">
+                          <Cloud className="w-3 h-3 text-sky-400" />
+                          <span>CFTools Cloud</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded bg-gaming-850 text-slate-300 border border-gaming-800 font-mono">
+                          <Server className="w-3 h-3 text-purple-400" />
+                          <span>{bot.server_ip}:{bot.server_query_port}</span>
+                        </span>
+                      )}
+
+                      {/* Custom status badge */}
+                      {bot.custom_status_enabled && (
+                        <span className="inline-flex items-center space-x-1 text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                          <MessageSquare className="w-3 h-3 text-amber-400" />
+                          <span>Statut Fixe</span>
+                        </span>
+                      )}
 
                       {/* Refresh interval */}
                       <span className="text-xs px-2 py-0.5 rounded bg-gaming-850 text-slate-400 border border-gaming-800">
@@ -141,12 +163,19 @@ export const BotsTable: React.FC<BotsTableProps> = ({
                             <MapPin className="w-3.5 h-3.5 text-amber-400" />
                             <span className="font-medium text-slate-300">{bot.last_status?.map_name || 'Chernarus'}</span>
                           </span>
-                          <span className="font-mono text-slate-200 flex items-center space-x-1">
-                            <Users className="w-3.5 h-3.5 text-blue-400" />
-                            <span>
-                              {bot.last_status?.players_count ?? 0} / {bot.last_status?.max_players ?? 60} Joueurs
+                          <div className="flex items-center space-x-2">
+                            {queueSize > 0 && (
+                              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                File: +{queueSize}
+                              </span>
+                            )}
+                            <span className="font-mono text-slate-200 flex items-center space-x-1">
+                              <Users className="w-3.5 h-3.5 text-blue-400" />
+                              <span>
+                                {bot.last_status?.players_count ?? 0} / {bot.last_status?.max_players ?? 60} Joueurs
+                              </span>
                             </span>
-                          </span>
+                          </div>
                         </div>
                         <div className="w-full bg-gaming-900 h-1.5 rounded-full overflow-hidden border border-gaming-800">
                           <div

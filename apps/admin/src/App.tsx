@@ -8,6 +8,7 @@ import { WorkerModal } from './components/WorkerModal.js';
 import { StatusHistoryModal } from './components/StatusHistoryModal.js';
 import { LoginModal } from './components/LoginModal.js';
 import { ChangePasswordModal } from './components/ChangePasswordModal.js';
+import { SettingsModal } from './components/SettingsModal.js';
 import { apiClient } from './api/client.js';
 import type {
   OverviewStats,
@@ -22,6 +23,7 @@ import type {
 export const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => apiClient.isAuthenticated());
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const [stats, setStats] = useState<OverviewStats>({
     total_workers: 0,
@@ -156,6 +158,7 @@ export const App: React.FC = () => {
         }}
         isRefreshing={isRefreshing}
         onlineWorkersCount={stats.online_workers}
+        onSettingsClick={() => setIsSettingsOpen(true)}
         onChangePasswordClick={() => setIsChangePasswordOpen(true)}
         onLogout={handleLogout}
       />
@@ -230,6 +233,14 @@ export const App: React.FC = () => {
         isOpen={isChangePasswordOpen}
         onClose={() => setIsChangePasswordOpen(false)}
         onChangePassword={apiClient.changePassword}
+      />
+
+      {/* CFTools Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onGetSettings={apiClient.getCFToolsSettings}
+        onSaveSettings={apiClient.updateCFToolsSettings}
       />
     </div>
   );

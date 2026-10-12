@@ -13,6 +13,8 @@ import type {
   BotSanitized,
   ServerStatusLog,
   DayZServerStatus,
+  CFToolsSettings,
+  UpdateCFToolsSettingsInput,
 } from '@gamepulse/shared';
 
 export type Env = {
@@ -248,6 +250,8 @@ api.use('/workers', verifyAdmin);
 api.use('/workers/*', verifyAdmin);
 api.use('/bots', verifyAdmin);
 api.use('/bots/*', verifyAdmin);
+api.use('/settings', verifyAdmin);
+api.use('/settings/*', verifyAdmin);
 
 // Worker Authentication middleware for /worker/* routes
 api.use('/worker/*', async (c, next) => {
@@ -306,16 +310,25 @@ api.get('/worker/:id/bots', async (c) => {
   }
 
   try {
-    const { results } = await db.prepare(
-      `SELECT * FROM bots
-       WHERE status = 'active'
-         AND (worker_id = ? OR worker_id IS NULL OR worker_id = '' OR worker_id = 'auto')
-       ORDER BY created_at ASC`
-    ).bind(workerId).all();
+    await ensureSettingsTable(db);
+    const [botsResult, cftoolsAppRow, cftoolsSecRow] = await Promise.all([
+      db.prepare(
+        `SELECT * FROM bots
+         WHERE status = 'active'
+           AND (worker_id = ? OR worker_id IS NULL OR worker_id = '' OR worker_id = 'auto')
+         ORDER BY created_at ASC`
+      ).bind(workerId).all(),
+      db.prepare("SELECT value FROM settings WHERE key = 'cftools_application_id'").first<{ value: string }>(),
+      db.prepare("SELECT value FROM settings WHERE key = 'cftools_secret'").first<{ value: string }>(),
+    ]);
 
     return c.json({
       success: true,
-      data: results ?? [],
+      data: botsResult.results ?? [],
+      cftools: {
+        application_id: cftoolsAppRow?.value || null,
+        secret: cftoolsSecRow?.value || null,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (err: unknown) {
@@ -407,6 +420,7 @@ api.post('/worker/:id/heartbeat', async (c) => {
               last_map_name = ?,
               last_players_count = ?,
               last_max_players = ?,
+              last_queue_size = ?,
               last_ping_ms = ?,
               last_is_online = ?,
               last_error = ?,
@@ -418,6 +432,7 @@ api.post('/worker/:id/heartbeat', async (c) => {
             status.map_name || '',
             status.players_count ?? 0,
             status.max_players ?? 60,
+            status.queue_size ?? 0,
             status.ping_ms ?? 0,
             status.is_online ? 1 : 0,
             status.error || null,
@@ -432,17 +447,18 @@ api.post('/worker/:id/heartbeat', async (c) => {
             `INSERT INTO server_status_logs (
               bot_id, server_ip, query_port, is_online,
               server_name, map_name, players_count, max_players,
-              ping_ms, error, recorded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              queue_size, ping_ms, error, recorded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(
             botId,
             status.server_ip || '',
-            status.query_port || 2305,
+            status.query_port || 2303,
             status.is_online ? 1 : 0,
             status.server_name || '',
             status.map_name || '',
             status.players_count ?? 0,
             status.max_players ?? 60,
+            status.queue_size ?? 0,
             status.ping_ms ?? 0,
             status.error || null,
             nowIso
@@ -788,7 +804,9 @@ api.get('/bots', async (c) => {
       `SELECT
         id, name, discord_client_id, server_ip, server_query_port,
         server_game_port, refresh_interval_secs, worker_id, status,
-        activity_format, created_at, updated_at,
+        activity_format, query_type, cftools_server_id,
+        custom_status_enabled, custom_status_text, last_queue_size,
+        created_at, updated_at,
         last_server_name, last_map_name, last_players_count,
         last_max_players, last_ping_ms, last_is_online,
         last_error, last_queried_at,
@@ -808,6 +826,11 @@ api.get('/bots', async (c) => {
       worker_id: row.worker_id,
       status: row.status,
       activity_format: row.activity_format,
+      query_type: row.query_type || 'a2s',
+      cftools_server_id: row.cftools_server_id || null,
+      custom_status_enabled: Boolean(row.custom_status_enabled),
+      custom_status_text: row.custom_status_text || null,
+      last_queue_size: row.last_queue_size ?? 0,
       created_at: row.created_at,
       updated_at: row.updated_at,
       has_token: true,
@@ -821,6 +844,7 @@ api.get('/bots', async (c) => {
         map_name: row.last_map_name || '',
         players_count: row.last_players_count ?? 0,
         max_players: row.last_max_players ?? 60,
+        queue_size: row.last_queue_size ?? 0,
         bots_count: 0,
         ping_ms: row.last_ping_ms ?? 0,
         environment: 'Linux',
@@ -871,20 +895,26 @@ api.post('/bots', async (c) => {
         id, name, discord_token, discord_client_id,
         server_ip, server_query_port, server_game_port,
         refresh_interval_secs, worker_id, status,
-        activity_format, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        activity_format, query_type, cftools_server_id,
+        custom_status_enabled, custom_status_text,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
       body.name,
       body.discord_token,
       body.discord_client_id,
       body.server_ip,
-      body.server_query_port ?? 2305,
+      body.server_query_port ?? 2303,
       body.server_game_port ?? null,
       body.refresh_interval_secs ?? 20,
       body.worker_id || null,
       body.status ?? 'active',
-      body.activity_format ?? 'Joue à DayZ - {map} [{players}/{max_players}]',
+      body.activity_format ?? 'Joue à DayZ - {map} [{players}/{max_players}]{queue_suffix}',
+      body.query_type ?? 'a2s',
+      body.cftools_server_id || null,
+      body.custom_status_enabled ? 1 : 0,
+      body.custom_status_text || null,
       nowIso,
       nowIso
     ).run();
@@ -917,6 +947,7 @@ api.put('/bots/:id', async (c) => {
   try {
     const body = await c.req.json<UpdateBotInput>();
     const nowIso = new Date().toISOString();
+    const customStatusInt = body.custom_status_enabled !== undefined ? (body.custom_status_enabled ? 1 : 0) : null;
 
     // Check if token was provided or left unchanged
     if (body.discord_token && body.discord_token.trim().length > 0) {
@@ -932,6 +963,10 @@ api.put('/bots/:id', async (c) => {
           worker_id = ?,
           status = COALESCE(?, status),
           activity_format = COALESCE(?, activity_format),
+          query_type = COALESCE(?, query_type),
+          cftools_server_id = COALESCE(?, cftools_server_id),
+          custom_status_enabled = COALESCE(?, custom_status_enabled),
+          custom_status_text = COALESCE(?, custom_status_text),
           updated_at = ?
         WHERE id = ?`
       ).bind(
@@ -945,6 +980,10 @@ api.put('/bots/:id', async (c) => {
         body.worker_id || null,
         body.status ?? null,
         body.activity_format ?? null,
+        body.query_type ?? null,
+        body.cftools_server_id !== undefined ? body.cftools_server_id : null,
+        customStatusInt,
+        body.custom_status_text !== undefined ? body.custom_status_text : null,
         nowIso,
         id
       ).run();
@@ -960,6 +999,10 @@ api.put('/bots/:id', async (c) => {
           worker_id = ?,
           status = COALESCE(?, status),
           activity_format = COALESCE(?, activity_format),
+          query_type = COALESCE(?, query_type),
+          cftools_server_id = COALESCE(?, cftools_server_id),
+          custom_status_enabled = COALESCE(?, custom_status_enabled),
+          custom_status_text = COALESCE(?, custom_status_text),
           updated_at = ?
         WHERE id = ?`
       ).bind(
@@ -972,6 +1015,10 @@ api.put('/bots/:id', async (c) => {
         body.worker_id || null,
         body.status ?? null,
         body.activity_format ?? null,
+        body.query_type ?? null,
+        body.cftools_server_id !== undefined ? body.cftools_server_id : null,
+        customStatusInt,
+        body.custom_status_text !== undefined ? body.custom_status_text : null,
         nowIso,
         id
       ).run();
@@ -1046,3 +1093,92 @@ api.get('/bots/:id/history', async (c) => {
     }, 500);
   }
 });
+
+// -------------------------------------------------------------
+// CFTOOLS CLOUD SETTINGS ENDPOINTS
+// -------------------------------------------------------------
+
+/**
+ * GET /api/settings/cftools
+ * Returns current CFTools configuration (with masked secret)
+ */
+api.get('/settings/cftools', async (c) => {
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({ success: false, error: 'DB not available', timestamp: new Date().toISOString() }, 500);
+  }
+
+  try {
+    await ensureSettingsTable(db);
+    const [appRow, secRow] = await Promise.all([
+      db.prepare("SELECT value FROM settings WHERE key = 'cftools_application_id'").first<{ value: string }>(),
+      db.prepare("SELECT value FROM settings WHERE key = 'cftools_secret'").first<{ value: string }>(),
+    ]);
+
+    const appId = appRow?.value || '';
+    const secret = secRow?.value || '';
+    const secretPreview = secret ? (secret.length > 8 ? `${secret.substring(0, 4)}...${secret.substring(secret.length - 4)}` : '••••••••') : '';
+
+    const settings: CFToolsSettings = {
+      application_id: appId,
+      secret_preview: secretPreview,
+      is_configured: Boolean(appId && secret),
+    };
+
+    return c.json<ApiResponse<CFToolsSettings>>({
+      success: true,
+      data: settings,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to fetch CFTools settings: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+
+/**
+ * POST /api/settings/cftools
+ * Updates global CFTools Application credentials
+ */
+api.post('/settings/cftools', async (c) => {
+  const db = c.env?.DB;
+  if (!db) {
+    return c.json<ApiResponse<null>>({ success: false, error: 'DB not available', timestamp: new Date().toISOString() }, 500);
+  }
+
+  try {
+    const body = await c.req.json<UpdateCFToolsSettingsInput>();
+    await ensureSettingsTable(db);
+
+    const appId = body.application_id?.trim() || '';
+    await db.prepare(`
+      INSERT INTO settings (key, value) VALUES ('cftools_application_id', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).bind(appId).run();
+
+    if (body.secret && body.secret.trim().length > 0) {
+      await db.prepare(`
+        INSERT INTO settings (key, value) VALUES ('cftools_secret', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).bind(body.secret.trim()).run();
+    }
+
+    return c.json<ApiResponse<{ updated: boolean }>>({
+      success: true,
+      data: { updated: true },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json<ApiResponse<null>>({
+      success: false,
+      error: `Failed to save CFTools settings: ${errorMsg}`,
+      timestamp: new Date().toISOString(),
+    }, 500);
+  }
+});
+

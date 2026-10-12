@@ -1,4 +1,4 @@
-use super::types::{ApiResponse, BotConfig, WorkerHeartbeatPayload, WorkerHeartbeatResponse};
+use super::types::{ApiResponse, BotConfig, CFToolsApiCredentials, WorkerHeartbeatPayload, WorkerHeartbeatResponse};
 use anyhow::{anyhow, Context, Result};
 use reqwest::{header, Client};
 use std::time::Duration;
@@ -30,8 +30,11 @@ impl AdminApiClient {
         })
     }
 
-    /// Fetches bots assigned to this worker or configured for auto-assignment.
-    pub async fn fetch_assigned_bots(&self, worker_id: &str) -> Result<Vec<BotConfig>> {
+    /// Fetches bots assigned to this worker or configured for auto-assignment along with CFTools credentials.
+    pub async fn fetch_assigned_bots(
+        &self,
+        worker_id: &str,
+    ) -> Result<(Vec<BotConfig>, Option<CFToolsApiCredentials>)> {
         let url = format!("{}/api/worker/{}/bots", self.base_url, worker_id);
         debug!("Syncing assigned bots from: {}", url);
 
@@ -57,7 +60,7 @@ impl AdminApiClient {
             return Err(anyhow!("API error: {}", err));
         }
 
-        Ok(api_res.data.unwrap_or_default())
+        Ok((api_res.data.unwrap_or_default(), api_res.cftools))
     }
 
     /// Sends worker heartbeat with system metrics and live DayZ server statuses.

@@ -94,8 +94,10 @@ RUST_LOG=info
 3. Renseignez :
    - **Nom** : ex. `Serveur Chernarus #1`
    - **Discord Client ID** et **Token de bot Discord** (obtenus sur le [Portail Développeur Discord](https://discord.com/developers/applications))
-   - **IP du serveur** et **Port Query** (par défaut 2305 pour DayZ, ou 27016 selon le serveur Steam)
-   - **Format d'activité** : ex. `🎮 Joue à DayZ - {map} [{players}/{max_players}]`
+   - **IP du serveur** et **Port Query** (par défaut **2303** pour DayZ Steam Query, ou 27016 selon le serveur)
+   - **Source de requête** : `Steam A2S` ou `CFTools Cloud` (avec support de la file d'attente `{queue}` et `{queue_suffix}`)
+   - **Statut personnalisé** (optionnel) : affichez un message fixe comme `« Le serveur ouvre bientôt »`
+   - **Format d'activité** : ex. `🎮 Joue à DayZ - {map} [{players}/{max_players}]{queue_suffix}`
 4. Cliquez sur **« Enregistrer le Bot »**.
 
 Dès la prochaine synchronisation (quelques secondes), le bot se connecte à Discord et met à jour sa Rich Presence en temps réel ! 🚀

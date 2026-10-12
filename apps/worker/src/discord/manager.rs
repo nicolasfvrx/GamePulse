@@ -1,24 +1,26 @@
 use crate::a2s::DayZServerStatus;
 use crate::api::BotConfig;
+use crate::cftools::CFToolsClient;
 use crate::discord::bot::{spawn_bot, ActiveBotHandle};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use tracing::info;
 
 pub struct BotManager {
     bots: HashMap<String, ActiveBotHandle>,
-}
-
-impl Default for BotManager {
-    fn default() -> Self {
-        Self::new()
-    }
+    cftools_client: Arc<CFToolsClient>,
 }
 
 impl BotManager {
-    pub fn new() -> Self {
+    pub fn new(cftools_client: Arc<CFToolsClient>) -> Self {
         Self {
             bots: HashMap::new(),
+            cftools_client,
         }
+    }
+
+    pub fn cftools_client(&self) -> &Arc<CFToolsClient> {
+        &self.cftools_client
     }
 
     /// Reconciles currently running bots against desired configuration from Cloudflare API.
@@ -47,21 +49,26 @@ impl BotManager {
                 // Check if important config changed
                 let config_changed = existing.config.server_ip != config.server_ip
                     || existing.config.server_query_port != config.server_query_port
+                    || existing.config.server_game_port != config.server_game_port
                     || existing.config.discord_token != config.discord_token
                     || existing.config.refresh_interval_secs != config.refresh_interval_secs
-                    || existing.config.activity_format != config.activity_format;
+                    || existing.config.activity_format != config.activity_format
+                    || existing.config.query_type != config.query_type
+                    || existing.config.cftools_server_id != config.cftools_server_id
+                    || existing.config.custom_status_enabled != config.custom_status_enabled
+                    || existing.config.custom_status_text != config.custom_status_text;
 
                 if config_changed {
                     info!("Restarting updated bot: {}", config.name);
                     if let Some(old_bot) = self.bots.remove(&config.id) {
                         old_bot.stop();
                     }
-                    let handle = spawn_bot(config.clone());
+                    let handle = spawn_bot(config.clone(), Arc::clone(&self.cftools_client));
                     self.bots.insert(config.id.clone(), handle);
                 }
             } else {
                 info!("Starting new bot: {} ({}:{})", config.name, config.server_ip, config.server_query_port);
-                let handle = spawn_bot(config.clone());
+                let handle = spawn_bot(config.clone(), Arc::clone(&self.cftools_client));
                 self.bots.insert(config.id.clone(), handle);
             }
         }

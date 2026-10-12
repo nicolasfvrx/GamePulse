@@ -1,5 +1,6 @@
 pub mod a2s;
 pub mod api;
+pub mod cftools;
 pub mod config;
 pub mod discord;
 pub mod metrics;

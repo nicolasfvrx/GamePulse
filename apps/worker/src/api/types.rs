@@ -16,6 +16,22 @@ pub struct BotConfig {
     pub worker_id: Option<String>,
     pub status: String,
     pub activity_format: String,
+    #[serde(default = "default_query_type")]
+    pub query_type: String,
+    pub cftools_server_id: Option<String>,
+    #[serde(default)]
+    pub custom_status_enabled: bool,
+    pub custom_status_text: Option<String>,
+}
+
+fn default_query_type() -> String {
+    "a2s".to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CFToolsApiCredentials {
+    pub application_id: Option<String>,
+    pub secret: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -40,4 +56,5 @@ pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
     pub error: Option<String>,
+    pub cftools: Option<CFToolsApiCredentials>,
 }

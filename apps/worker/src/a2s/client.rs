@@ -111,6 +111,7 @@ impl A2SClient {
             ping_ms,
             environment: env_str.to_string(),
             game_version: info.version,
+            queue_size: None,
             last_queried_at: timestamp,
             error: None,
         }
@@ -136,6 +137,7 @@ impl A2SClient {
             ping_ms: 0,
             environment: "Unknown".to_string(),
             game_version: None,
+            queue_size: None,
             last_queried_at: timestamp,
             error: Some(error),
         }

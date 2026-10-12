@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, RefreshCw, Plus, Key, LogOut } from 'lucide-react';
+import { Radio, RefreshCw, Plus, Key, LogOut, Settings } from 'lucide-react';
 
 interface NavbarProps {
   onRefresh: () => void;
@@ -7,6 +7,7 @@ interface NavbarProps {
   isRefreshing: boolean;
   onlineWorkersCount: number;
   onChangePasswordClick?: () => void;
+  onSettingsClick?: () => void;
   onLogout?: () => void;
 }
 
@@ -16,6 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isRefreshing,
   onlineWorkersCount,
   onChangePasswordClick,
+  onSettingsClick,
   onLogout,
 }) => {
   return (
@@ -59,6 +61,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
           </button>
+
+          {onSettingsClick && (
+            <button
+              onClick={onSettingsClick}
+              className="p-2 rounded-lg bg-gaming-850 hover:bg-gaming-800 border border-gaming-800 text-slate-300 hover:text-sky-400 transition-colors"
+              title="Paramètres API & CFTools"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
 
           {onChangePasswordClick && (
             <button

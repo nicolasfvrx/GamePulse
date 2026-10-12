@@ -14,6 +14,7 @@ pub struct DayZServerStatus {
     pub ping_ms: u64,
     pub environment: String,
     pub game_version: Option<String>,
+    pub queue_size: Option<u32>,
     pub last_queried_at: String,
     pub error: Option<String>,
 }

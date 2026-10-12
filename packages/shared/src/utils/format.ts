@@ -8,21 +8,45 @@ import type { DayZServerStatus } from '../types/server.js';
  * {players} - Current online players
  * {max_players} - Maximum server capacity
  * {queue} - Estimated queue or 0
+ * {queue_suffix} - Formatted suffix (e.g. " (+5)") if queue > 0, otherwise empty
  * {ping} - Query ping in ms
  */
 export function formatPresenceText(
   template: string = 'Joue à DayZ - {map} [{players}/{max_players}]',
-  status?: DayZServerStatus | null
+  status?: DayZServerStatus | null,
+  customStatus?: { enabled?: boolean; text?: string | null }
 ): string {
+  if (customStatus?.enabled && customStatus.text && customStatus.text.trim()) {
+    const custom = customStatus.text.trim();
+    if (status && status.is_online) {
+      const queue = status.queue_size ?? 0;
+      const queueSuffix = queue > 0 ? ` (+${queue})` : '';
+      return custom
+        .replace('{server_name}', status.server_name || 'DayZ Server')
+        .replace('{map}', status.map_name || 'Chernarus')
+        .replace('{players}', String(status.players_count ?? 0))
+        .replace('{max_players}', String(status.max_players ?? 60))
+        .replace('{queue}', String(queue))
+        .replace('{queue_suffix}', queueSuffix)
+        .replace('{ping}', `${status.ping_ms ?? 0}ms`);
+    }
+    return custom;
+  }
+
   if (!status || !status.is_online) {
     return 'DayZ - Serveur Hors Ligne';
   }
+
+  const queue = status.queue_size ?? 0;
+  const queueSuffix = queue > 0 ? ` (+${queue})` : '';
 
   return template
     .replace('{server_name}', status.server_name || 'DayZ Server')
     .replace('{map}', status.map_name || 'Chernarus')
     .replace('{players}', String(status.players_count ?? 0))
     .replace('{max_players}', String(status.max_players ?? 60))
+    .replace('{queue}', String(queue))
+    .replace('{queue_suffix}', queueSuffix)
     .replace('{ping}', `${status.ping_ms ?? 0}ms`);
 }
 

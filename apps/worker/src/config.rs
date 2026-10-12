@@ -8,6 +8,8 @@ pub struct Config {
     pub admin_api_url: String,
     pub poll_interval_secs: u64,
     pub hostname: String,
+    pub cftools_application_id: Option<String>,
+    pub cftools_secret: Option<String>,
 }
 
 impl Config {
@@ -36,6 +38,9 @@ impl Config {
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(20);
 
+        let cftools_application_id = env::var("CFTOOLS_APPLICATION_ID").ok();
+        let cftools_secret = env::var("CFTOOLS_SECRET").ok();
+
         Self {
             worker_id,
             worker_name,
@@ -43,6 +48,8 @@ impl Config {
             admin_api_url,
             poll_interval_secs,
             hostname,
+            cftools_application_id,
+            cftools_secret,
         }
     }
 }

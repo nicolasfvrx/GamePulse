@@ -1,7 +1,9 @@
 use crate::api::{AdminApiClient, WorkerHeartbeatPayload};
+use crate::cftools::CFToolsClient;
 use crate::config::Config;
 use crate::discord::BotManager;
 use crate::metrics::MetricsCollector;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
@@ -9,17 +11,25 @@ use tracing::{debug, error, info, warn};
 pub struct WorkerPoller {
     config: Config,
     api_client: AdminApiClient,
+    cftools_client: Arc<CFToolsClient>,
     metrics: MetricsCollector,
     manager: BotManager,
 }
 
 impl WorkerPoller {
     pub fn new(config: Config, api_client: AdminApiClient) -> Self {
+        let cftools_client = Arc::new(CFToolsClient::new(
+            config.cftools_application_id.clone(),
+            config.cftools_secret.clone(),
+        ));
+        let manager = BotManager::new(Arc::clone(&cftools_client));
+
         Self {
             config,
             api_client,
+            cftools_client,
             metrics: MetricsCollector::new(),
-            manager: BotManager::new(),
+            manager,
         }
     }
 
@@ -35,10 +45,17 @@ impl WorkerPoller {
         loop {
             ticker.tick().await;
 
-            // 1. Fetch desired bots from Cloudflare API
+            // 1. Fetch desired bots and CFTools credentials from Cloudflare API
             match self.api_client.fetch_assigned_bots(&self.config.worker_id).await {
-                Ok(assigned_bots) => {
+                Ok((assigned_bots, cftools_creds)) => {
                     debug!("Fetched {} bots from Cloudflare API", assigned_bots.len());
+                    if let Some(creds) = cftools_creds {
+                        if creds.application_id.is_some() || creds.secret.is_some() {
+                            self.cftools_client
+                                .update_credentials(creds.application_id, creds.secret)
+                                .await;
+                        }
+                    }
                     self.manager.sync_bots(assigned_bots);
                 }
                 Err(e) => {

@@ -8,6 +8,8 @@ import type {
   CreateBotInput,
   UpdateBotInput,
   ServerStatusLog,
+  CFToolsSettings,
+  UpdateCFToolsSettingsInput,
 } from '@gamepulse/shared';
 
 const API_BASE = '/api';
@@ -181,4 +183,14 @@ export const apiClient = {
       return [];
     }
   },
+
+  getCFToolsSettings: async (): Promise<CFToolsSettings> => {
+    return await request<CFToolsSettings>('/settings/cftools');
+  },
+
+  updateCFToolsSettings: (input: UpdateCFToolsSettingsInput) =>
+    request<{ updated: boolean }>('/settings/cftools', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS bots (
   discord_token TEXT NOT NULL,
   discord_client_id TEXT NOT NULL,
   server_ip TEXT NOT NULL,
-  server_query_port INTEGER NOT NULL DEFAULT 2305,
+  server_query_port INTEGER NOT NULL DEFAULT 2303,
   server_game_port INTEGER,
   refresh_interval_secs INTEGER NOT NULL DEFAULT 20,
   worker_id TEXT REFERENCES workers(id) ON DELETE SET NULL,

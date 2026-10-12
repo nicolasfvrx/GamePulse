@@ -11,6 +11,7 @@ export interface DayZServerStatus {
   ping_ms: number;
   environment: string;
   game_version?: string;
+  queue_size?: number;
   last_queried_at: string;
   error?: string | null;
 }
@@ -25,6 +26,7 @@ export interface ServerStatusLog {
   map_name: string;
   players_count: number;
   max_players: number;
+  queue_size?: number;
   ping_ms: number;
   recorded_at: string;
 }
