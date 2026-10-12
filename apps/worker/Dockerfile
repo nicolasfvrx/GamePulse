@@ -34,7 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -m -u 1000 -U -s /bin/sh appuser
 
 # Copy compiled binary from builder
-COPY --from=builder /usr/src/dayz-worker/target/release/dayz-worker /usr/local/bin/dayz-worker
+COPY --from=builder /usr/src/dayz-worker/target/release/gamepulse-worker /usr/local/bin/gamepulse-worker
+
+# Also create symlink dayz-worker for backward compatibility
+RUN ln -s /usr/local/bin/gamepulse-worker /usr/local/bin/dayz-worker
 
 USER appuser
 WORKDIR /home/appuser
@@ -43,4 +46,4 @@ WORKDIR /home/appuser
 ENV RUST_LOG=info
 ENV POLL_INTERVAL_SECS=20
 
-ENTRYPOINT ["/usr/local/bin/dayz-worker"]
+ENTRYPOINT ["/usr/local/bin/gamepulse-worker"]
