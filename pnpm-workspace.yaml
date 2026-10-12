@@ -3,6 +3,7 @@ packages:
   - "apps/*"
 
 strictDepBuilds: false
+dangerouslyAllowAllBuilds: true
 
 allowBuilds:
   esbuild: true
