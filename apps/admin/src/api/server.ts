@@ -44,6 +44,25 @@ async function ensureSettingsTable(db: D1Database): Promise<void> {
   }
 }
 
+// Helper: Ensure new schema columns exist in bots and server_status_logs
+async function ensureBotColumns(db: D1Database): Promise<void> {
+  const migrations = [
+    "ALTER TABLE bots ADD COLUMN query_type TEXT NOT NULL DEFAULT 'a2s'",
+    "ALTER TABLE bots ADD COLUMN cftools_server_id TEXT",
+    "ALTER TABLE bots ADD COLUMN custom_status_enabled INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE bots ADD COLUMN custom_status_text TEXT",
+    "ALTER TABLE bots ADD COLUMN last_queue_size INTEGER DEFAULT 0",
+    "ALTER TABLE server_status_logs ADD COLUMN queue_size INTEGER DEFAULT 0",
+  ];
+  for (const sql of migrations) {
+    try {
+      await db.prepare(sql).run();
+    } catch {
+      // Column already exists or SQLite error, safely ignore
+    }
+  }
+}
+
 // Helper: Get admin password from D1 settings > env.ADMIN_PASSWORD > env.ADMIN_SECRET_KEY > 'admin'
 async function getAdminPassword(c: { env?: Env['Bindings'] }): Promise<string> {
   const db = c.env?.DB;
@@ -310,7 +329,10 @@ api.get('/worker/:id/bots', async (c) => {
   }
 
   try {
-    await ensureSettingsTable(db);
+    await Promise.all([
+      ensureSettingsTable(db),
+      ensureBotColumns(db),
+    ]);
     const [botsResult, cftoolsAppRow, cftoolsSecRow] = await Promise.all([
       db.prepare(
         `SELECT * FROM bots
@@ -322,9 +344,19 @@ api.get('/worker/:id/bots', async (c) => {
       db.prepare("SELECT value FROM settings WHERE key = 'cftools_secret'").first<{ value: string }>(),
     ]);
 
+    const formattedBots = (botsResult.results ?? []).map((bot: any) => ({
+      ...bot,
+      server_query_port: Number(bot.server_query_port || 2303),
+      refresh_interval_secs: Number(bot.refresh_interval_secs || 20),
+      query_type: bot.query_type || 'a2s',
+      cftools_server_id: bot.cftools_server_id || null,
+      custom_status_enabled: Boolean(bot.custom_status_enabled),
+      custom_status_text: bot.custom_status_text || null,
+    }));
+
     return c.json({
       success: true,
-      data: botsResult.results ?? [],
+      data: formattedBots,
       cftools: {
         application_id: cftoolsAppRow?.value || null,
         secret: cftoolsSecRow?.value || null,

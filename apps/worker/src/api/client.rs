@@ -51,10 +51,17 @@ impl AdminApiClient {
             return Err(anyhow!("Failed to fetch bots (status {}): {}", status, body));
         }
 
-        let api_res: ApiResponse<Vec<BotConfig>> = res
-            .json()
+        let body = res
+            .text()
             .await
-            .context("Failed to deserialize bots response")?;
+            .context("Failed to read HTTP response body while fetching bots")?;
+
+        let api_res: ApiResponse<Vec<BotConfig>> = match serde_json::from_str(&body) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                return Err(anyhow!("Failed to deserialize bots response: {}. Raw response: {}", e, body));
+            }
+        };
 
         if let Some(err) = api_res.error {
             return Err(anyhow!("API error: {}", err));
