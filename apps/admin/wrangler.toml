@@ -9,5 +9,5 @@ ADMIN_SECRET_KEY = "gamepulse-admin-secret-change-in-prod"
 [[d1_databases]]
 binding = "DB"
 database_name = "gamepulse-db"
-database_id = "gamepulse-db-id"
+database_id = "bda17fc7-7792-4c2c-b12d-9c1f4543798b"
 migrations_dir = "migrations"
