@@ -5,7 +5,7 @@
   "description": "GamePulse - High-performance Discord game presence network with Cloudflare D1 control plane and Rust workers",
   "scripts": {
     "build": "pnpm --filter @gamepulse/shared run build && pnpm --filter @gamepulse/admin run build",
-    "typecheck": "pnpm --filter @gamepulse/shared run typecheck && pnpm --filter @gamepulse/admin run typecheck",
+    "typecheck": "pnpm --filter @gamepulse/shared run build && pnpm --filter @gamepulse/shared run typecheck && pnpm --filter @gamepulse/admin run typecheck",
     "lint": "pnpm --filter @gamepulse/shared run lint && pnpm --filter @gamepulse/admin run lint",
     "dev:admin": "pnpm --filter @gamepulse/admin run dev",
     "build:admin": "pnpm --filter @gamepulse/admin run build",

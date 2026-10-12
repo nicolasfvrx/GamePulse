@@ -4,11 +4,12 @@
   "description": "Shared TypeScript definitions and utilities for GamePulse Discord Presence Network",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
+      "types": "./src/index.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "default": "./src/index.ts"
     }
   },
   "scripts": {

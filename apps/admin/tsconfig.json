@@ -19,7 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@gamepulse/shared": ["../../packages/shared/dist/index.d.ts"]
+      "@gamepulse/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["src", "functions"]
