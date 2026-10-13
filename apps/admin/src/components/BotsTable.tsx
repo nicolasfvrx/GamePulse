@@ -13,6 +13,7 @@ import {
   Layers,
   Cloud,
   MessageSquare,
+  AlertCircle,
 } from 'lucide-react';
 import type { BotSanitized } from '@gamepulse/shared';
 import { formatPresenceText, resolveMapName } from '@gamepulse/shared';
@@ -185,9 +186,20 @@ export const BotsTable: React.FC<BotsTableProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-500 italic">
-                        En attente de réponse au paquet UDP Valve A2S_INFO...
-                      </p>
+                      <div className="space-y-1 py-0.5">
+                        {bot.last_status?.error ? (
+                          <div className="flex items-center space-x-1.5 text-xs text-rose-400 bg-rose-950/40 px-2 py-1 rounded border border-rose-800/40">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate font-mono text-[11px]" title={bot.last_status.error}>
+                              {bot.last_status.error}
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">
+                            En attente de réponse du serveur DayZ...
+                          </p>
+                        )}
+                      </div>
                     )}
 
                     {/* Rich Presence Preview Box */}

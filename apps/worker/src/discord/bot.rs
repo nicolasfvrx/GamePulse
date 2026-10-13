@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::interval;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 pub struct ActiveBotHandle {
     pub config: BotConfig,
@@ -60,30 +60,86 @@ pub fn spawn_bot(
             ticker.tick().await;
 
             let status = if query_config.query_type == "cftools" {
+                info!("[{}] Polling DayZ server via CFTools Cloud ({}:{})...", query_config.name, query_config.server_ip, query_config.server_query_port);
                 match cftools_client.query_server(
                     query_config.cftools_server_id.as_deref(),
                     &query_config.server_ip,
                     query_config.server_query_port,
                     query_config.server_game_port,
                 ).await {
-                    Ok(s) => s,
+                    Ok(s) => {
+                        info!(
+                            "[{}] CFTools SUCCESS: \"{}\" | Map: {} | Players: {}/{} | Queue: {} | Ping: {}ms",
+                            query_config.name,
+                            s.server_name,
+                            s.map_name,
+                            s.players_count,
+                            s.max_players,
+                            s.queue_size.unwrap_or(0),
+                            s.ping_ms
+                        );
+                        s
+                    }
                     Err(err) => {
-                        warn!("[{}] CFTools query error: {}. Falling back to A2S...", query_config.name, err);
-                        A2SClient::query_server(
+                        warn!(
+                            "[{}] CFTools FAILED: {}. Falling back to Steam A2S UDP query on {}:{}...",
+                            query_config.name,
+                            err,
+                            query_config.server_ip,
+                            query_config.server_query_port
+                        );
+                        let a2s_res = A2SClient::query_server(
                             &query_config.server_ip,
                             query_config.server_query_port,
                             query_config.server_game_port,
                             Duration::from_secs(4),
-                        ).await
+                        ).await;
+                        if a2s_res.is_online {
+                            info!(
+                                "[{}] A2S Fallback SUCCESS: \"{}\" | Map: {} | Players: {}/{} | Ping: {}ms",
+                                query_config.name,
+                                a2s_res.server_name,
+                                a2s_res.map_name,
+                                a2s_res.players_count,
+                                a2s_res.max_players,
+                                a2s_res.ping_ms
+                            );
+                        } else {
+                            warn!(
+                                "[{}] A2S Fallback FAILED (Offline): {}",
+                                query_config.name,
+                                a2s_res.error.as_deref().unwrap_or("Query timed out or host unreachable")
+                            );
+                        }
+                        a2s_res
                     }
                 }
             } else {
-                A2SClient::query_server(
+                info!("[{}] Polling DayZ server via Steam A2S UDP ({}:{})...", query_config.name, query_config.server_ip, query_config.server_query_port);
+                let a2s_res = A2SClient::query_server(
                     &query_config.server_ip,
                     query_config.server_query_port,
                     query_config.server_game_port,
                     Duration::from_secs(4),
-                ).await
+                ).await;
+                if a2s_res.is_online {
+                    info!(
+                        "[{}] A2S SUCCESS: \"{}\" | Map: {} | Players: {}/{} | Ping: {}ms",
+                        query_config.name,
+                        a2s_res.server_name,
+                        a2s_res.map_name,
+                        a2s_res.players_count,
+                        a2s_res.max_players,
+                        a2s_res.ping_ms
+                    );
+                } else {
+                    warn!(
+                        "[{}] A2S FAILED (Offline): {}",
+                        query_config.name,
+                        a2s_res.error.as_deref().unwrap_or("Query timed out or host unreachable")
+                    );
+                }
+                a2s_res
             };
 
             // Format presence string
@@ -97,6 +153,7 @@ pub fn spawn_bot(
                     Some(&dict_lock),
                 )
             };
+            info!("[{}] Presence -> \"{}\"", query_config.name, presence_text);
             let _ = presence_tx.send(presence_text);
 
             // Store status
@@ -104,7 +161,6 @@ pub fn spawn_bot(
                 let mut lock = query_status.write().await;
                 *lock = Some(status);
             }
-            debug!("[{}] Updated server status & presence", query_config.name);
         }
     });
 
@@ -166,19 +222,6 @@ pub fn format_presence(
     custom_status_text: Option<&str>,
     map_dictionary: Option<&HashMap<String, String>>,
 ) -> String {
-    if custom_status_enabled {
-        if let Some(custom) = custom_status_text {
-            let trimmed = custom.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-    }
-
-    if !status.is_online {
-        return "DayZ - Serveur Hors Ligne".to_string();
-    }
-
     let empty_dict = HashMap::new();
     let dict = map_dictionary.unwrap_or(&empty_dict);
     let resolved_map = resolve_map_name(&status.map_name, dict);
@@ -189,6 +232,30 @@ pub fn format_presence(
     } else {
         "".to_string()
     };
+
+    if custom_status_enabled {
+        if let Some(custom) = custom_status_text {
+            let trimmed = custom.trim();
+            if !trimmed.is_empty() {
+                if status.is_online {
+                    return trimmed
+                        .replace("{map}", &resolved_map)
+                        .replace("{players}", &status.players_count.to_string())
+                        .replace("{max_players}", &status.max_players.to_string())
+                        .replace("{queue}", &queue_num.to_string())
+                        .replace("{queue_suffix}", &queue_suffix)
+                        .replace("{server_name}", server_name)
+                        .replace("{ping}", &format!("{}ms", status.ping_ms));
+                } else {
+                    return trimmed.to_string();
+                }
+            }
+        }
+    }
+
+    if !status.is_online {
+        return "DayZ - Serveur Hors Ligne".to_string();
+    }
 
     template
         .replace("{map}", &resolved_map)

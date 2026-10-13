@@ -207,7 +207,7 @@ impl CFToolsClient {
             }
         }
 
-        // Generate SHA-1 candidates from IP and candidate ports
+        // Generate SHA-1 candidates from IP (and resolved DNS if domain) and candidate ports
         let mut candidate_ports: Vec<u16> = Vec::new();
         if let Some(gp) = game_port {
             candidate_ports.push(gp);
@@ -223,10 +223,25 @@ impl CFToolsClient {
         }
 
         let clean_ip = server_ip.trim();
-        for port in candidate_ports {
-            let hash = compute_cftools_resource_id("1", clean_ip, port);
-            if !candidates.contains(&hash) {
-                candidates.push(hash);
+        let mut ips: Vec<String> = vec![clean_ip.to_string()];
+        // If domain name, also try resolved numeric IP address
+        if clean_ip.chars().any(|c| c.is_alphabetic()) {
+            if let Ok(mut addrs) = tokio::net::lookup_host(format!("{}:{}", clean_ip, query_port)).await {
+                if let Some(resolved) = addrs.next() {
+                    let resolved_ip = resolved.ip().to_string();
+                    if !ips.contains(&resolved_ip) {
+                        ips.push(resolved_ip);
+                    }
+                }
+            }
+        }
+
+        for ip in &ips {
+            for &port in &candidate_ports {
+                let hash = compute_cftools_resource_id("1", ip, port);
+                if !candidates.contains(&hash) {
+                    candidates.push(hash);
+                }
             }
         }
 
@@ -255,7 +270,7 @@ impl CFToolsClient {
                     *tok_lock = None;
                 }
                 let body = res.text().await.unwrap_or_default();
-                last_err = format!("CFTools gameserver query ({status}): {body}");
+                last_err = format!("CFTools query HTTP {status}: {body}");
                 continue;
             }
 
@@ -267,18 +282,41 @@ impl CFToolsClient {
                 }
             };
 
+            // If CFTools returns {"status": false}, this candidate was not found!
+            if json.get("status").and_then(|v| v.as_bool()) == Some(false) {
+                last_err = format!("Server not found on CFTools for {resource_id} (status: false)");
+                continue;
+            }
+
             // In CFTools response, the root object has keys matching the resource_id
-            let server_obj = if let Some(obj) = json.get(resource_id) {
+            let server_obj = if let Some(obj) = json.get(resource_id).filter(|o| o.is_object()) {
                 obj
             } else if let Some(map) = json.as_object() {
-                map.values()
-                    .find(|v| v.get("status").is_some() || v.get("name").is_some())
-                    .unwrap_or(&json)
+                if let Some(found) = map.values().find(|v| {
+                    v.is_object() && (
+                        v.get("status").map_or(false, |s| s.is_object()) ||
+                        v.get("name").map_or(false, |n| n.is_string())
+                    )
+                }) {
+                    found
+                } else {
+                    last_err = format!("No server details object found in CFTools response for {resource_id}");
+                    continue;
+                }
             } else {
-                &json
+                last_err = format!("Invalid response format for {resource_id}");
+                continue;
             };
 
-            // Check if server object indicates an error
+            // Ensure server_obj has valid status object or name string
+            let status_obj = server_obj.get("status").and_then(|s| s.as_object());
+            let name_str = server_obj.get("name").and_then(|n| n.as_str());
+            if status_obj.is_none() && name_str.is_none() {
+                last_err = format!("Response for {resource_id} missing both status and name");
+                continue;
+            }
+
+            // Check if server object indicates an internal CFTools error
             if let Some(err_val) = server_obj.get("_object").and_then(|o| o.get("error")).and_then(|e| e.as_str()) {
                 if err_val != "GameServerQueryError.NONE" {
                     last_err = format!("CFTools query error: {err_val}");
@@ -286,17 +324,9 @@ impl CFToolsClient {
                 }
             }
 
-            // Ensure status or name is present
-            if server_obj.get("status").is_none() && server_obj.get("name").is_none() {
-                last_err = format!("No status or name found in CFTools response for {resource_id}");
-                continue;
-            }
-
             let ping_ms = start_time.elapsed().as_millis() as u64;
 
-            let server_name = server_obj
-                .get("name")
-                .and_then(|v| v.as_str())
+            let server_name = name_str
                 .unwrap_or("DayZ Server")
                 .to_string();
 
@@ -311,20 +341,18 @@ impl CFToolsClient {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
-            let status = server_obj.get("status");
-
-            let players_count = status
+            let players_count = status_obj
                 .and_then(|s| s.get("players"))
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0) as u8;
 
-            let max_players = status
+            let max_players = status_obj
                 .and_then(|s| s.get("slots"))
                 .and_then(|v| v.as_u64())
                 .unwrap_or(60) as u8;
 
             // Parse Queue size: status.queue.size
-            let queue_size = status
+            let queue_size = status_obj
                 .and_then(|s| s.get("queue"))
                 .and_then(|q| q.get("size"))
                 .and_then(|v| v.as_u64())
@@ -333,6 +361,7 @@ impl CFToolsClient {
             let is_online = server_obj
                 .get("online")
                 .and_then(|v| v.as_bool())
+                .or_else(|| server_obj.get("offline").and_then(|v| v.as_bool()).map(|off| !off))
                 .unwrap_or(true);
 
             debug!(

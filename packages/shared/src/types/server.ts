@@ -28,5 +28,6 @@ export interface ServerStatusLog {
   max_players: number;
   queue_size?: number;
   ping_ms: number;
+  error?: string | null;
   recorded_at: string;
 }

@@ -112,7 +112,7 @@ impl DiscordGatewayClient {
 
                             // New Presence text to push
                             Some(presence_text) = self.presence_rx.recv() => {
-                                debug!("[{}] Updating Discord presence: {}", bot_name, presence_text);
+                                info!("[{}] Discord Presence packet sent: \"{}\"", bot_name, presence_text);
                                 let presence_payload = json!({
                                     "op": 3,
                                     "d": {

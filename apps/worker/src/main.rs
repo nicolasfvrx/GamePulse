@@ -9,14 +9,16 @@ pub mod poller;
 use api::AdminApiClient;
 use config::Config;
 use poller::WorkerPoller;
-use tracing::{info, Level};
+use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 1. Initialize tracing logger
+    // 1. Initialize tracing logger with EnvFilter support (defaults to INFO)
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
+        .with_env_filter(filter)
         .with_target(false)
         .finish();
     tracing::subscriber::set_global_default(subscriber)

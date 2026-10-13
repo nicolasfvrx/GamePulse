@@ -96,6 +96,7 @@ export const StatusHistoryModal: React.FC<StatusHistoryModalProps> = ({ bot, onC
                       <th className="px-4 py-2.5">Carte</th>
                       <th className="px-4 py-2.5">Joueurs</th>
                       <th className="px-4 py-2.5">Ping</th>
+                      <th className="px-4 py-2.5">Détails / Erreur</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gaming-800/60 bg-gaming-900/40">
@@ -123,6 +124,15 @@ export const StatusHistoryModal: React.FC<StatusHistoryModalProps> = ({ bot, onC
                         </td>
                         <td className="px-4 py-2.5 font-mono text-slate-400">
                           {log.ping_ms} ms
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {log.error ? (
+                            <span className="inline-block text-[11px] text-rose-300 font-mono bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800/60 max-w-xs truncate" title={log.error}>
+                              {log.error}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-mono">OK</span>
+                          )}
                         </td>
                       </tr>
                     ))}
