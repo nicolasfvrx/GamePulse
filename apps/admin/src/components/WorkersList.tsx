@@ -249,7 +249,7 @@ export const WorkersList: React.FC<WorkersListProps> = ({
                         <span>Mémoire RAM</span>
                       </span>
                       <span className="font-mono text-slate-200">
-                        {Math.round(worker.ram_used_mb)} / {Math.round(worker.ram_total_mb)} Mo
+                        {worker.ram_used_mb < 100 ? worker.ram_used_mb.toFixed(1) : Math.round(worker.ram_used_mb)} / {Math.round(worker.ram_total_mb)} Mo
                       </span>
                     </div>
                     <div className="w-full bg-gaming-850 h-1.5 rounded-full overflow-hidden border border-gaming-800">
