@@ -294,8 +294,8 @@ impl CFToolsClient {
             } else if let Some(map) = json.as_object() {
                 if let Some(found) = map.values().find(|v| {
                     v.is_object() && (
-                        v.get("status").map_or(false, |s| s.is_object()) ||
-                        v.get("name").map_or(false, |n| n.is_string())
+                        v.get("status").is_some_and(|s| s.is_object()) ||
+                        v.get("name").is_some_and(|n| n.is_string())
                     )
                 }) {
                     found
