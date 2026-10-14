@@ -247,6 +247,8 @@ impl CFToolsClient {
 
         // 3. Try each candidate on /v1/gameserver/{resource_id}
         let mut last_err = String::new();
+        let mut first_offline_status: Option<DayZServerStatus> = None;
+
         for resource_id in &candidates {
             let url = format!("{}/gameserver/{}", CFTOOLS_API_BASE, resource_id);
             let res = match self
@@ -308,84 +310,39 @@ impl CFToolsClient {
                 continue;
             };
 
-            // Ensure server_obj has valid status object or name string
-            let status_obj = server_obj.get("status").and_then(|s| s.as_object());
-            let name_str = server_obj.get("name").and_then(|n| n.as_str());
-            if status_obj.is_none() && name_str.is_none() {
-                last_err = format!("Response for {resource_id} missing both status and name");
-                continue;
-            }
-
-            // Check if server object indicates an internal CFTools error
-            if let Some(err_val) = server_obj.get("_object").and_then(|o| o.get("error")).and_then(|e| e.as_str()) {
-                if err_val != "GameServerQueryError.NONE" {
-                    last_err = format!("CFTools query error: {err_val}");
-                    continue;
-                }
-            }
-
             let ping_ms = start_time.elapsed().as_millis() as u64;
 
-            let server_name = name_str
-                .unwrap_or("DayZ Server")
-                .to_string();
+            let parsed_status = match parse_cftools_server_details(server_obj, server_ip, query_port, game_port, ping_ms) {
+                Some(s) => s,
+                None => {
+                    last_err = format!("Response for {resource_id} missing valid server details or error reported");
+                    continue;
+                }
+            };
 
-            let map_name = server_obj
-                .get("map")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Chernarus")
-                .to_string();
+            if parsed_status.is_online {
+                debug!(
+                    "CFTools candidate {} is ONLINE: players={}/{}, queue={:?}, map={}",
+                    resource_id, parsed_status.players_count, parsed_status.max_players, parsed_status.queue_size, parsed_status.map_name
+                );
+                return Ok(parsed_status);
+            } else {
+                debug!(
+                    "CFTools candidate {} responded with OFFLINE status (online={:?}, offline={:?}, status={:?}, players={}). Checking other candidates...",
+                    resource_id,
+                    server_obj.get("online"),
+                    server_obj.get("offline"),
+                    server_obj.get("status"),
+                    parsed_status.players_count
+                );
+                if first_offline_status.is_none() {
+                    first_offline_status = Some(parsed_status);
+                }
+            }
+        }
 
-            let version = server_obj
-                .get("version")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-
-            let players_count = status_obj
-                .and_then(|s| s.get("players"))
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u8;
-
-            let max_players = status_obj
-                .and_then(|s| s.get("slots"))
-                .and_then(|v| v.as_u64())
-                .unwrap_or(60) as u8;
-
-            // Parse Queue size: status.queue.size
-            let queue_size = status_obj
-                .and_then(|s| s.get("queue"))
-                .and_then(|q| q.get("size"))
-                .and_then(|v| v.as_u64())
-                .map(|q| q as u32);
-
-            let is_online = server_obj
-                .get("online")
-                .and_then(|v| v.as_bool())
-                .or_else(|| server_obj.get("offline").and_then(|v| v.as_bool()).map(|off| !off))
-                .unwrap_or(true);
-
-            debug!(
-                "Successfully queried server via CFTools resource {}: players={}/{}, queue={:?}, map={}",
-                resource_id, players_count, max_players, queue_size, map_name
-            );
-
-            return Ok(DayZServerStatus {
-                server_ip: server_ip.to_string(),
-                query_port,
-                game_port,
-                is_online,
-                server_name,
-                map_name,
-                players_count,
-                max_players,
-                bots_count: 0,
-                ping_ms,
-                environment: "Linux".to_string(),
-                game_version: version,
-                queue_size,
-                last_queried_at: now_iso(),
-                error: None,
-            });
+        if let Some(offline_status) = first_offline_status {
+            return Ok(offline_status);
         }
 
         Err(anyhow!(
@@ -398,6 +355,99 @@ impl CFToolsClient {
             candidates
         ))
     }
+}
+
+/// Parses a CFTools server details JSON object into a DayZServerStatus.
+/// Robustly handles online/offline flags, player counts, queue sizes, and edge cases.
+pub fn parse_cftools_server_details(
+    server_obj: &serde_json::Value,
+    server_ip: &str,
+    query_port: u16,
+    game_port: Option<u16>,
+    ping_ms: u64,
+) -> Option<DayZServerStatus> {
+    let status_obj = server_obj.get("status").and_then(|s| s.as_object());
+    let name_str = server_obj.get("name").and_then(|n| n.as_str());
+    if status_obj.is_none() && name_str.is_none() {
+        return None;
+    }
+
+    if let Some(err_val) = server_obj.get("_object").and_then(|o| o.get("error")).and_then(|e| e.as_str()) {
+        if err_val != "GameServerQueryError.NONE" {
+            return None;
+        }
+    }
+
+    let server_name = name_str.unwrap_or("DayZ Server").to_string();
+
+    let map_name = server_obj
+        .get("map")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Chernarus")
+        .to_string();
+
+    let version = server_obj
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let players_count = status_obj
+        .and_then(|s| s.get("players"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) as u8;
+
+    let max_players = status_obj
+        .and_then(|s| s.get("slots"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(60) as u8;
+
+    let queue_size = status_obj
+        .and_then(|s| s.get("queue"))
+        .and_then(|q| q.get("size"))
+        .and_then(|v| v.as_u64())
+        .map(|q| q as u32);
+
+    let is_online = if players_count > 0 {
+        // If there are players actively playing on the server, it is 100% online regardless of lag in crawler
+        true
+    } else {
+        let online_val = server_obj.get("online").and_then(|v| {
+            v.as_bool()
+                .or_else(|| v.as_str().map(|s| s.eq_ignore_ascii_case("true") || s == "1" || s.eq_ignore_ascii_case("online")))
+                .or_else(|| v.as_i64().map(|n| n != 0))
+        });
+        let offline_val = server_obj.get("offline").and_then(|v| {
+            v.as_bool()
+                .or_else(|| v.as_str().map(|s| s.eq_ignore_ascii_case("true") || s == "1" || s.eq_ignore_ascii_case("offline")))
+                .or_else(|| v.as_i64().map(|n| n != 0))
+        });
+        let status_str_online = server_obj.get("status").and_then(|v| v.as_str()).map(|s| {
+            s.eq_ignore_ascii_case("online")
+        });
+
+        online_val
+            .or_else(|| offline_val.map(|off| !off))
+            .or(status_str_online)
+            .unwrap_or(true)
+    };
+
+    Some(DayZServerStatus {
+        server_ip: server_ip.to_string(),
+        query_port,
+        game_port,
+        is_online,
+        server_name,
+        map_name,
+        players_count,
+        max_players,
+        bots_count: 0,
+        ping_ms,
+        environment: "Linux".to_string(),
+        game_version: version,
+        queue_size,
+        last_queried_at: now_iso(),
+        error: if is_online { None } else { Some("CFTools reported server offline".to_string()) },
+    })
 }
 
 /// Computes the CFTools SHA-1 resource ID for DayZ servers: sha1(game + ip + port)
@@ -430,6 +480,7 @@ fn now_iso() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn test_compute_cftools_resource_id() {
@@ -442,6 +493,69 @@ mod tests {
         let hash = compute_cftools_resource_id("1", "51.89.96.22", 2302);
         assert_eq!(hash.len(), 40);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_parse_cftools_server_details_online() {
+        let val = json!({
+            "name": "My DayZ Server",
+            "map": "ChernarusPlus",
+            "online": true,
+            "offline": false,
+            "status": {
+                "players": 15,
+                "slots": 60,
+                "queue": {
+                    "active": true,
+                    "size": 3
+                }
+            }
+        });
+
+        let status = parse_cftools_server_details(&val, "127.0.0.1", 2303, Some(2302), 42).unwrap();
+        assert!(status.is_online);
+        assert_eq!(status.server_name, "My DayZ Server");
+        assert_eq!(status.map_name, "ChernarusPlus");
+        assert_eq!(status.players_count, 15);
+        assert_eq!(status.max_players, 60);
+        assert_eq!(status.queue_size, Some(3));
+    }
+
+    #[test]
+    fn test_parse_cftools_server_details_players_override_stale_offline_flag() {
+        // Even if CFTools crawler flags online: false, if there are active players it must be online
+        let val = json!({
+            "name": "Active Server",
+            "map": "Livonia",
+            "online": false,
+            "offline": true,
+            "status": {
+                "players": 28,
+                "slots": 60
+            }
+        });
+
+        let status = parse_cftools_server_details(&val, "127.0.0.1", 2303, Some(2302), 42).unwrap();
+        assert!(status.is_online);
+        assert_eq!(status.players_count, 28);
+    }
+
+    #[test]
+    fn test_parse_cftools_server_details_offline() {
+        let val = json!({
+            "name": "Offline Server",
+            "map": "Namalsk",
+            "online": false,
+            "offline": true,
+            "status": {
+                "players": 0,
+                "slots": 60
+            }
+        });
+
+        let status = parse_cftools_server_details(&val, "127.0.0.1", 2303, Some(2302), 42).unwrap();
+        assert!(!status.is_online);
+        assert_eq!(status.players_count, 0);
     }
 }
 

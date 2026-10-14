@@ -67,9 +67,9 @@ pub fn spawn_bot(
                     query_config.server_query_port,
                     query_config.server_game_port,
                 ).await {
-                    Ok(s) => {
+                    Ok(s) if s.is_online => {
                         info!(
-                            "[{}] CFTools SUCCESS: \"{}\" | Map: {} | Players: {}/{} | Queue: {} | Ping: {}ms",
+                            "[{}] CFTools SUCCESS (Online): \"{}\" | Map: {} | Players: {}/{} | Queue: {} | Ping: {}ms",
                             query_config.name,
                             s.server_name,
                             s.map_name,
@@ -79,6 +79,43 @@ pub fn spawn_bot(
                             s.ping_ms
                         );
                         s
+                    }
+                    Ok(s) => {
+                        warn!(
+                            "[{}] CFTools marked server as OFFLINE. Verifying via direct Steam A2S query on {}:{} to prevent false positives...",
+                            query_config.name,
+                            query_config.server_ip,
+                            query_config.server_query_port
+                        );
+                        let mut a2s_res = A2SClient::query_server(
+                            &query_config.server_ip,
+                            query_config.server_query_port,
+                            query_config.server_game_port,
+                            Duration::from_secs(4),
+                        ).await;
+
+                        if a2s_res.is_online {
+                            info!(
+                                "[{}] A2S Verification SUCCESS (server is actually ONLINE!): \"{}\" | Map: {} | Players: {}/{} | Ping: {}ms",
+                                query_config.name,
+                                a2s_res.server_name,
+                                a2s_res.map_name,
+                                a2s_res.players_count,
+                                a2s_res.max_players,
+                                a2s_res.ping_ms
+                            );
+                            if a2s_res.queue_size.is_none() && s.queue_size.is_some() {
+                                a2s_res.queue_size = s.queue_size;
+                            }
+                            a2s_res
+                        } else {
+                            warn!(
+                                "[{}] A2S Verification confirmed server is OFFLINE: {}",
+                                query_config.name,
+                                a2s_res.error.as_deref().unwrap_or("Server unreachable")
+                            );
+                            s
+                        }
                     }
                     Err(err) => {
                         warn!(

@@ -33,55 +33,74 @@ impl A2SClient {
             return Self::offline_status(ip, query_port, game_port, now_iso, format!("UDP connect failed: {}", e));
         }
 
-        // 1. Send initial request
-        let initial_req = build_info_packet(None);
-        if let Err(e) = socket.send(&initial_req).await {
-            return Self::offline_status(ip, query_port, game_port, now_iso, format!("UDP send failed: {}", e));
-        }
-
-        let mut buf = [0u8; 2048];
-
-        // 2. Receive first response with timeout
-        let recv_res = timeout(timeout_dur, socket.recv(&mut buf)).await;
-        let bytes_read = match recv_res {
-            Ok(Ok(n)) => n,
-            Ok(Err(e)) => {
-                return Self::offline_status(ip, query_port, game_port, now_iso, format!("UDP recv error: {}", e));
-            }
-            Err(_) => {
-                return Self::offline_status(ip, query_port, game_port, now_iso, "Query timed out".to_string());
-            }
+        let attempt_timeout = if timeout_dur.as_millis() >= 2000 {
+            Duration::from_millis((timeout_dur.as_millis() / 2) as u64)
+        } else {
+            timeout_dur
         };
 
-        let parse_res = parse_info_response(&buf[..bytes_read]);
+        let mut last_err = "Query timed out".to_string();
 
-        match parse_res {
-            Ok(info) => {
-                let ping_ms = start_time.elapsed().as_millis() as u64;
-                Self::online_status(ip, query_port, game_port, ping_ms, now_iso, info)
+        for attempt in 1..=2 {
+            let initial_req = build_info_packet(None);
+            if let Err(e) = socket.send(&initial_req).await {
+                return Self::offline_status(ip, query_port, game_port, now_iso, format!("UDP send failed: {}", e));
             }
-            Err(A2SError::ChallengeRequired(challenge)) => {
-                debug!("Server at {} issued A2S challenge, responding...", target_addr);
-                let challenged_req = build_info_packet(Some(challenge));
-                if let Err(e) = socket.send(&challenged_req).await {
-                    return Self::offline_status(ip, query_port, game_port, now_iso, format!("Challenge send failed: {}", e));
-                }
 
-                let second_recv = timeout(timeout_dur, socket.recv(&mut buf)).await;
-                match second_recv {
-                    Ok(Ok(n)) => match parse_info_response(&buf[..n]) {
-                        Ok(info) => {
-                            let ping_ms = start_time.elapsed().as_millis() as u64;
-                            Self::online_status(ip, query_port, game_port, ping_ms, now_iso, info)
+            let mut buf = [0u8; 2048];
+            let recv_res = timeout(attempt_timeout, socket.recv(&mut buf)).await;
+            let bytes_read = match recv_res {
+                Ok(Ok(n)) => n,
+                Ok(Err(e)) => {
+                    last_err = format!("UDP recv error: {}", e);
+                    continue;
+                }
+                Err(_) => {
+                    last_err = format!("A2S query timed out (attempt {}/2)", attempt);
+                    continue;
+                }
+            };
+
+            let parse_res = parse_info_response(&buf[..bytes_read]);
+
+            match parse_res {
+                Ok(info) => {
+                    let ping_ms = start_time.elapsed().as_millis() as u64;
+                    return Self::online_status(ip, query_port, game_port, ping_ms, now_iso, info);
+                }
+                Err(A2SError::ChallengeRequired(challenge)) => {
+                    debug!("Server at {} issued A2S challenge, responding...", target_addr);
+                    let challenged_req = build_info_packet(Some(challenge));
+                    if let Err(e) = socket.send(&challenged_req).await {
+                        return Self::offline_status(ip, query_port, game_port, now_iso, format!("Challenge send failed: {}", e));
+                    }
+
+                    let second_recv = timeout(attempt_timeout, socket.recv(&mut buf)).await;
+                    match second_recv {
+                        Ok(Ok(n)) => match parse_info_response(&buf[..n]) {
+                            Ok(info) => {
+                                let ping_ms = start_time.elapsed().as_millis() as u64;
+                                return Self::online_status(ip, query_port, game_port, ping_ms, now_iso, info);
+                            }
+                            Err(e) => {
+                                last_err = format!("Parse error after challenge: {}", e);
+                            }
+                        },
+                        Ok(Err(e)) => {
+                            last_err = format!("Recv error after challenge: {}", e);
                         }
-                        Err(e) => Self::offline_status(ip, query_port, game_port, now_iso, format!("Parse error after challenge: {}", e)),
-                    },
-                    Ok(Err(e)) => Self::offline_status(ip, query_port, game_port, now_iso, format!("Recv error after challenge: {}", e)),
-                    Err(_) => Self::offline_status(ip, query_port, game_port, now_iso, "Timed out waiting for challenged response".to_string()),
+                        Err(_) => {
+                            last_err = format!("Timed out waiting for challenged response (attempt {}/2)", attempt);
+                        }
+                    }
+                }
+                Err(e) => {
+                    last_err = format!("Invalid A2S packet: {}", e);
                 }
             }
-            Err(e) => Self::offline_status(ip, query_port, game_port, now_iso, format!("Invalid A2S packet: {}", e)),
         }
+
+        Self::offline_status(ip, query_port, game_port, now_iso, last_err)
     }
 
     fn online_status(
